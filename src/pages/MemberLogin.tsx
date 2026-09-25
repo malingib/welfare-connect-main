@@ -46,10 +46,11 @@ const MemberLogin = () => {
       navigate("/member/dashboard");
     } catch (error) {
       console.error('Login error:', error);
+      const message = error instanceof Error ? error.message : 'Invalid credentials. Please try again.';
       toast({
         variant: "destructive",
-        title: "Error",
-        description: "An unexpected error occurred. Please try again.",
+        title: "Member login failed",
+        description: message,
       });
     } finally {
       setLoading(false);

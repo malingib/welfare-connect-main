@@ -5,6 +5,7 @@ export type AppJwtPayload = {
   role?: string;
   member_id?: string;
   member_number?: string;
+  sid?: string;
 };
 
 const ADMIN_ROLES = new Set(["super_admin", "chairperson", "treasurer", "secretary"]);

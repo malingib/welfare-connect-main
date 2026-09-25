@@ -81,11 +81,15 @@ serve(async (req) => {
       action: "MEMBER_STATUS_UPDATE",
       table_name: "members",
       record_id: memberId,
+      user_id: String(claims.sub || "") || null,
+      member_id: memberId,
       status: "success",
       metadata: {
         from_status: current.status,
         to_status: nextStatus,
+        performed_by_user_id: String(claims.sub || "unknown"),
         performed_by_role: claims.role || null,
+        session_id: claims.sid || null,
       },
     });
 

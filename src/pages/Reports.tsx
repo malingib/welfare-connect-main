@@ -206,7 +206,10 @@ const getContributionSignedAmount = (tx: Transaction) => {
   const amount = Math.abs(Number(tx.amount || 0));
   return normalizeType(tx.transaction_type) === 'contribution_refund' ? -amount : amount;
 };
-const isArrearsTransaction = (tx: Transaction) => normalizeType(tx.transaction_type) === 'arrears';
+const isLatePaymentTransaction = (tx: Transaction) => {
+  const type = normalizeType(tx.transaction_type);
+  return type === 'arrears' || type === 'late_payment';
+};
 const isPenaltyTransaction = (tx: Transaction) => normalizeType(tx.transaction_type) === 'penalty';
 
 const ITEMS_PER_PAGE = 20;
@@ -743,7 +746,7 @@ const Reports = () => {
       return s === '' || s === 'completed' || s === 'success';
     };
 
-    const arrearsRows = transactions.filter((tx) => inScope(tx) && successful(tx) && isArrearsTransaction(tx));
+    const arrearsRows = transactions.filter((tx) => inScope(tx) && successful(tx) && isLatePaymentTransaction(tx));
     const penaltyRows = transactions.filter((tx) => inScope(tx) && successful(tx) && isPenaltyTransaction(tx));
 
     const arrearsLedgerCount = arrearsRows.length;
@@ -877,7 +880,7 @@ const Reports = () => {
 
   const arrearsAnalytics = useMemo(() => {
     const filtered = transactions.filter((tx) => {
-      if (!isCountableTransaction(tx) || !isArrearsTransaction(tx)) return false;
+      if (!isCountableTransaction(tx) || !isLatePaymentTransaction(tx)) return false;
       if (selectedCaseIds.length > 0 && (!tx.case_id || !selectedCaseIds.includes(tx.case_id))) return false;
       const txDate = new Date(String(tx.created_at));
       return txDate >= dateRange.startDate && txDate <= dateRange.endDate;
@@ -1268,11 +1271,11 @@ const Reports = () => {
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-2">
               <Card>
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium text-muted-foreground">Arrears Collected (Default Account)</CardTitle>
+                  <CardTitle className="text-sm font-medium text-muted-foreground">Late Payments Collected</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="text-2xl font-bold">KES {arrearsAnalytics.total.toLocaleString()}</div>
-                  <p className="text-xs text-muted-foreground">{arrearsAnalytics.count.toLocaleString()} arrears transactions in range</p>
+                  <p className="text-xs text-muted-foreground">{arrearsAnalytics.count.toLocaleString()} late-payment transactions in range</p>
                 </CardContent>
               </Card>
               <Card>
@@ -1292,7 +1295,7 @@ const Reports = () => {
               </CardHeader>
               <CardContent className="text-sm text-muted-foreground space-y-1">
                 <p><span className="font-semibold text-foreground">Case payments:</span> `contribution`, `case_wallet_deduction`</p>
-                <p><span className="font-semibold text-foreground">Late/default-account payments:</span> `arrears`</p>
+                <p><span className="font-semibold text-foreground">Late/closed-case payments:</span> `late_payment` (legacy: `arrears`)</p>
                 <p><span className="font-semibold text-foreground">Reinstatement penalty:</span> `penalty`</p>
               </CardContent>
             </Card>
@@ -1902,9 +1905,9 @@ const Reports = () => {
               <CardContent>
                 <div className="grid gap-4 md:grid-cols-2">
                   <div className="rounded-md border p-4 space-y-2">
-                    <div className="font-semibold">Arrears Account vs Late Payments</div>
+                    <div className="font-semibold">Late-Payment Ledger vs Late-Payment Metric</div>
                     <div className="text-sm text-muted-foreground">
-                      Ledger arrears: {disciplineAccountReconciliation.arrearsLedgerCount.toLocaleString()} tx, KES {disciplineAccountReconciliation.arrearsLedgerTotal.toLocaleString()}
+                      Ledger late payments: {disciplineAccountReconciliation.arrearsLedgerCount.toLocaleString()} tx, KES {disciplineAccountReconciliation.arrearsLedgerTotal.toLocaleString()}
                     </div>
                     <div className="text-sm text-muted-foreground">
                       Late payments metric: {disciplineAccountReconciliation.lateCount.toLocaleString()} tx, KES {disciplineAccountReconciliation.lateTotal.toLocaleString()}
@@ -1939,8 +1942,8 @@ const Reports = () => {
             <Card>
               <CardHeader className="flex flex-row items-center justify-between">
                 <div>
-                  <CardTitle>Late Payments (Default Account)</CardTitle>
-                  <CardDescription>Closed-case settlements collected as arrears/default-account entries.</CardDescription>
+                  <CardTitle>Late Payments</CardTitle>
+                  <CardDescription>Closed-case settlements collected after close (late payments, incl. legacy arrears).</CardDescription>
                   {disciplineReport?.late_payment_scope?.sample_truncated && (
                     <p className="mt-1 text-xs text-amber-700">
                       Showing latest {disciplineReport.late_payment_scope.sampled_row_count.toLocaleString()} of {disciplineReport.late_payment_scope.full_row_count.toLocaleString()} rows.

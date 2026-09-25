@@ -22,25 +22,23 @@ Future<void> main() async {
     final posthogProjectToken = dotenv.env['POSTHOG_PROJECT_TOKEN'];
     final posthogHost = dotenv.env['POSTHOG_HOST'];
 
-    if (posthogProjectToken == null || posthogProjectToken.isEmpty) {
-      assert(() {
-        throw StateError(
-          'POSTHOG_PROJECT_TOKEN variable required by PostHog is missing or un-configured, this causes events to be silently missed. This error stops appearing once POSTHOG_PROJECT_TOKEN is configured',
-        );
-      }());
-    } else if (posthogHost == null || posthogHost.isEmpty) {
-      assert(() {
-        throw StateError(
-          'POSTHOG_HOST variable required by PostHog is missing or un-configured, this causes events to be silently missed. This error stops appearing once POSTHOG_HOST is configured',
-        );
-      }());
-    } else {
+    final hasPosthogConfig = posthogProjectToken != null &&
+        posthogProjectToken.isNotEmpty &&
+        posthogProjectToken != 'your_posthog_project_token' &&
+        posthogHost != null &&
+        posthogHost.isNotEmpty;
+
+    if (hasPosthogConfig) {
       final config = PostHogConfig(posthogProjectToken);
       config.host = posthogHost;
       config.errorTrackingConfig.captureFlutterErrors = true;
       config.errorTrackingConfig.capturePlatformDispatcherErrors = true;
       config.errorTrackingConfig.captureIsolateErrors = true;
-      await Posthog().setup(config);
+      try {
+        await Posthog().setup(config);
+      } catch (e) {
+        debugPrint('PostHog initialization skipped: $e');
+      }
     }
   }
 

@@ -91,25 +91,15 @@ class _CasesScreenState extends ConsumerState<CasesScreen> {
           return ListView(
             padding: const EdgeInsets.all(AppConstants.marginEdge),
             children: [
-              Row(
-                children: [
-                  Expanded(child: _SummaryBox(label: 'Total', value: '${cases.length}')),
-                  const SizedBox(width: 10),
-                  Expanded(child: _SummaryBox(label: 'Paid', value: '$paidCount')),
-                  const SizedBox(width: 10),
-                  Expanded(child: _SummaryBox(label: 'Pending', value: '$pendingCount')),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Expanded(
-                      child:
-                          _SummaryBox(label: 'Finalized Cases', value: '$finalizedCount')),
-                  const SizedBox(width: 10),
-                  Expanded(
-                      child: _SummaryBox(
-                          label: 'Contribution Count', value: '$contributionCount')),
+              _SummaryGrid(
+                items: [
+                  _SummaryBox(label: 'Total', value: '${cases.length}'),
+                  _SummaryBox(label: 'Paid', value: '$paidCount'),
+                  _SummaryBox(label: 'Pending', value: '$pendingCount'),
+                  _SummaryBox(
+                      label: 'Finalized Cases', value: '$finalizedCount'),
+                  _SummaryBox(
+                      label: 'Contribution Count', value: '$contributionCount'),
                 ],
               ),
               const SizedBox(height: 8),
@@ -143,10 +133,12 @@ class _CasesScreenState extends ConsumerState<CasesScreen> {
                 initialValue: _statusFilter,
                 items: const [
                   DropdownMenuItem(value: 'all', child: Text('All statuses')),
-                  DropdownMenuItem(value: 'pending', child: Text('Pending only')),
+                  DropdownMenuItem(
+                      value: 'pending', child: Text('Pending only')),
                   DropdownMenuItem(value: 'paid', child: Text('Paid only')),
                   DropdownMenuItem(value: 'open', child: Text('Open only')),
-                  DropdownMenuItem(value: 'finalized', child: Text('Finalized only')),
+                  DropdownMenuItem(
+                      value: 'finalized', child: Text('Finalized only')),
                 ],
                 onChanged: (v) => setState(() => _statusFilter = v ?? 'all'),
                 decoration: const InputDecoration(
@@ -166,7 +158,8 @@ class _CasesScreenState extends ConsumerState<CasesScreen> {
                   final progress = c.progress.clamp(0.0, 1.0);
                   return Container(
                     margin: const EdgeInsets.only(bottom: 8),
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 12),
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(10),
@@ -175,29 +168,34 @@ class _CasesScreenState extends ConsumerState<CasesScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                '#${c.caseNumber} • ${c.caseType.toUpperCase()}',
-                                style: const TextStyle(fontWeight: FontWeight.w700),
+                        Text(
+                          '#${c.caseNumber} • ${c.caseType.toUpperCase()}',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                        const SizedBox(height: 8),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: c.paid
+                                  ? const Color(0xFFE8F5ED)
+                                  : const Color(0xFFFFF1EA),
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                            child: Text(
+                              c.paid ? 'PAID' : 'PENDING',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                color: c.paid
+                                    ? const Color(0xFF0A7C2F)
+                                    : const Color(0xFFB34700),
                               ),
                             ),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: c.paid ? const Color(0xFFE8F5ED) : const Color(0xFFFFF1EA),
-                                borderRadius: BorderRadius.circular(999),
-                              ),
-                              child: Text(
-                                c.paid ? 'PAID' : 'PENDING',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w700,
-                                  color: c.paid ? const Color(0xFF0A7C2F) : const Color(0xFFB34700),
-                                ),
-                              ),
-                            ),
-                          ],
+                          ),
                         ),
                         const SizedBox(height: 6),
                         Text('Required: ${money.format(required)}'),
@@ -206,7 +204,8 @@ class _CasesScreenState extends ConsumerState<CasesScreen> {
                         if (c.isFinalized)
                           const Padding(
                             padding: EdgeInsets.only(top: 4),
-                            child: Text('Finalized case (late payment applies)'),
+                            child:
+                                Text('Finalized case (late payment applies)'),
                           ),
                         const SizedBox(height: 8),
                         LinearProgressIndicator(
@@ -215,7 +214,8 @@ class _CasesScreenState extends ConsumerState<CasesScreen> {
                           borderRadius: BorderRadius.circular(999),
                         ),
                         const SizedBox(height: 4),
-                        Text('Progress: ${(progress * 100).toStringAsFixed(0)}%'),
+                        Text(
+                            'Progress: ${(progress * 100).toStringAsFixed(0)}%'),
                       ],
                     ),
                   );
@@ -248,9 +248,36 @@ class _SummaryBox extends StatelessWidget {
           Text(label, style: Theme.of(context).textTheme.labelSmall),
           const SizedBox(height: 3),
           Text(value,
-              style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 20)),
+              style:
+                  const TextStyle(fontWeight: FontWeight.w800, fontSize: 20)),
         ],
       ),
+    );
+  }
+}
+
+class _SummaryGrid extends StatelessWidget {
+  final List<Widget> items;
+
+  const _SummaryGrid({required this.items});
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final columns = constraints.maxWidth >= 640
+            ? 3
+            : constraints.maxWidth >= 360
+                ? 2
+                : 1;
+        final width = (constraints.maxWidth - ((columns - 1) * 10)) / columns;
+        return Wrap(
+          spacing: 10,
+          runSpacing: 8,
+          children:
+              items.map((item) => SizedBox(width: width, child: item)).toList(),
+        );
+      },
     );
   }
 }

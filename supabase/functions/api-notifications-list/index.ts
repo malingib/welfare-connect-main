@@ -72,7 +72,7 @@ serve(async (req) => {
     const msg = e instanceof Error ? e.message : "Unauthorized";
     const lowered = msg.toLowerCase();
     if (lowered.includes("forbidden")) return jsonResponse(403, { error: "Forbidden" }, req.headers.get("Origin"));
-    if (lowered.includes("jwt") || lowered.includes("token") || lowered.includes("bearer")) {
+    if (lowered.includes("jwt") || lowered.includes("jws") || lowered.includes("token") || lowered.includes("bearer")) {
       return jsonResponse(401, { error: msg }, req.headers.get("Origin"));
     }
     return jsonResponse(500, { error: msg }, req.headers.get("Origin"));

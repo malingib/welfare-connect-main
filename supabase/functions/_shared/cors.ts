@@ -6,6 +6,8 @@
 // from arbitrary origins.
 
 const DEFAULT_ALLOWED_ORIGINS = [
+  "https://malangawelfare.co.ke",
+  "https://www.malangawelfare.co.ke",
   "https://malangawelfare.org",
   "https://www.malangawelfare.org",
   "https://mwelfare.netlify.app",
@@ -24,7 +26,7 @@ function allowedOrigins(): string[] {
 
 const BASE_HEADERS = {
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-app-token",
+    "authorization, x-client-info, apikey, content-type, x-app-token, x-retry-count, traceparent, tracestate, baggage",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
   Vary: "Origin",
 };

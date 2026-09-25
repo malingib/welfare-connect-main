@@ -202,6 +202,7 @@ serve(async (req) => {
             "contribution",
             "case_wallet_deduction",
             "arrears",
+            "late_payment",
             "contribution_refund",
             "case_wallet_refund",
           ]);
@@ -214,7 +215,7 @@ serve(async (req) => {
             const txType = String(r.transaction_type || "");
             const amount = Number(r.amount) || 0;
             const current = netByCase.get(caseId) || 0;
-            if (txType === "contribution" || txType === "case_wallet_deduction" || txType === "arrears") {
+            if (txType === "contribution" || txType === "case_wallet_deduction" || txType === "arrears" || txType === "late_payment") {
               netByCase.set(caseId, current + Math.abs(amount));
               return;
             }

@@ -1,12 +1,12 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { SignJWT } from "https://esm.sh/jose@5.9.6";
-import { corsHeaders } from "../_shared/cors.ts";
+import { buildCorsHeaders } from "../_shared/cors.ts";
 
-function jsonResponse(status: number, payload: Record<string, unknown>) {
+function jsonResponse(status: number, payload: Record<string, unknown>, origin?: string | null) {
   return new Response(JSON.stringify(payload), {
     status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
+    headers: { ...buildCorsHeaders(origin), "Content-Type": "application/json" },
   });
 }
 
@@ -62,12 +62,13 @@ async function findMemberByNumber(
 }
 
 serve(async (req) => {
+  const origin = req.headers.get("Origin");
   if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
+    return new Response("ok", { headers: buildCorsHeaders(origin) });
   }
 
   if (req.method !== "POST") {
-    return jsonResponse(405, { error: "Method not allowed" });
+    return jsonResponse(405, { error: "Method not allowed" }, origin);
   }
 
   try {
@@ -78,28 +79,30 @@ serve(async (req) => {
 
     const appJwtSecret = Deno.env.get("APP_JWT_SECRET");
     if (!appJwtSecret) {
-      return jsonResponse(500, { error: "Server auth secret not configured" });
+      return jsonResponse(500, { error: "Server auth secret not configured" }, origin);
     }
 
     const { member_number, phone_number } = await req.json();
     if (!member_number || !phone_number) {
-      return jsonResponse(400, { error: "member_number and phone_number are required" });
+      return jsonResponse(400, { error: "member_number and phone_number are required" }, origin);
     }
 
     const member = await findMemberByNumber(supabase, member_number);
     if (!member) {
-      return jsonResponse(401, { error: "Invalid member credentials" });
+      return jsonResponse(401, { error: "Invalid member credentials" }, origin);
     }
 
     const suppliedPhone = normalizePhone(String(phone_number));
     const storedPhone = normalizePhone(String(member.phone_number || ""));
     if (!storedPhone || suppliedPhone !== storedPhone) {
-      return jsonResponse(401, { error: "Invalid member credentials" });
+      return jsonResponse(401, { error: "Invalid member credentials" }, origin);
     }
 
+    const sessionId = crypto.randomUUID();
     const token = await new SignJWT({
       role: "member",
       member_id: member.id,
+      sid: sessionId,
     })
       .setProtectedHeader({ alg: "HS256", typ: "JWT" })
       .setSubject(member.id)
@@ -111,7 +114,9 @@ serve(async (req) => {
       action: "LOGIN",
       table_name: "members",
       record_id: member.id,
+      member_id: member.id,
       status: "success",
+      metadata: { session_id: sessionId },
     }).throwOnError();
 
     return jsonResponse(200, {
@@ -124,9 +129,9 @@ serve(async (req) => {
         wallet_balance: member.wallet_balance,
         is_active: member.is_active,
       },
-    });
+    }, origin);
   } catch (error) {
     console.error("auth-member-login error:", error);
-    return jsonResponse(500, { error: "Internal server error" });
+    return jsonResponse(500, { error: "Internal server error" }, origin);
   }
 });

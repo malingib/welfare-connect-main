@@ -54,6 +54,22 @@ export function isAppTokenExpired(token: string | null): boolean {
   return exp <= now;
 }
 
+/**
+ * Audit stamp for transaction metadata: links a human-initiated write to the
+ * current login session (sid) and actor (sub). The DB audit trigger copies
+ * these into audit_logs. Returns {} when no valid session exists.
+ */
+export function auditStamp(): Record<string, string> {
+  const token = getAppToken();
+  if (!token || isAppTokenExpired(token)) return {};
+  const payload = decodeJwtPayload(token);
+  if (!payload) return {};
+  const stamp: Record<string, string> = {};
+  if (payload.sid) stamp.session_id = String(payload.sid);
+  if (payload.sub) stamp.actor_user_id = String(payload.sub);
+  return stamp;
+}
+
 export function normalizePhone(phone: string): string {
   const digits = String(phone || "").replace(/\D/g, "");
   if (digits.startsWith("254")) return digits;

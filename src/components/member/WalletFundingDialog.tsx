@@ -17,8 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Wallet, Loader2 } from "lucide-react";
 import { Label } from "@/components/ui/label";
-import { invokeWithAppToken } from "@/lib/appAuth";
-
+import { auditStamp, invokeWithAppToken } from "@/lib/appAuth";
 interface WalletFundingDialogProps {
   memberId: string;
   memberName: string;
@@ -104,6 +103,7 @@ const WalletFundingDialog = ({
             entry_type: "wallet_funding_dialog_manual",
             mpesa_reference: reference || null,
             account_reference: accountReference || null,
+            ...auditStamp(),
           },
         };
 

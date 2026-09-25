@@ -52,10 +52,11 @@ const AccountTransactionsList = ({ title, transactions: providedTransactions }: 
   const [transferDialogOpen, setTransferDialogOpen] = useState(false);
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
+  const [memberLookup, setMemberLookup] = useState<Record<string, Member>>({});
   const [selectedMemberId, setSelectedMemberId] = useState('');
   const [transferring, setTransferring] = useState(false);
 
-  // Fetch members for transfer dialog
+  // Fetch members for transfer dialog + member number display
   const fetchMembers = async () => {
     try {
       const result = await (supabase
@@ -66,6 +67,11 @@ const AccountTransactionsList = ({ title, transactions: providedTransactions }: 
       const { data, error } = result;
       if (error) throw error;
       setMembers(data || []);
+      const lookup: Record<string, Member> = {};
+      for (const m of data || []) {
+        if (m.id) lookup[m.id] = m;
+      }
+      setMemberLookup(lookup);
     } catch (error) {
       console.error('Error fetching members:', error);
       toast({
@@ -135,6 +141,10 @@ const AccountTransactionsList = ({ title, transactions: providedTransactions }: 
   };
 
   useEffect(() => {
+    fetchMembers();
+  }, []);
+
+  useEffect(() => {
     const fetchTransactions = async () => {
       if (providedTransactions) {
         setTransactions(providedTransactions);
@@ -154,6 +164,8 @@ const AccountTransactionsList = ({ title, transactions: providedTransactions }: 
         query = query.eq('transaction_type', 'penalty');
       } else if (title.toLowerCase().includes('arrears')) {
         query = query.eq('transaction_type', 'arrears');
+      } else if (title.toLowerCase().includes('late')) {
+        query = query.eq('transaction_type', 'late_payment');
       } else if (title.toLowerCase().includes('suspense')) {
         // For suspense account, we need to find transactions not associated with any member
         // First get all members
@@ -370,7 +382,22 @@ const AccountTransactionsList = ({ title, transactions: providedTransactions }: 
                     {toEAT(new Date(transaction.createdAt)).toLocaleDateString()}
                   </TableCell>
                   <TableCell>{transaction.description}</TableCell>
-                  <TableCell>Member #{transaction.memberId.substring(0, 8)}</TableCell>
+                  <TableCell>
+                    {(() => {
+                      const info = transaction.memberId ? memberLookup[transaction.memberId] : undefined;
+                      if (info) {
+                        return (
+                          <span>
+                            <span className="font-medium">{info.name}</span>
+                            <span className="text-muted-foreground"> (#{info.member_number})</span>
+                          </span>
+                        );
+                      }
+                      return transaction.memberId
+                        ? `Member #${transaction.memberId.substring(0, 8)}`
+                        : '-';
+                    })()}
+                  </TableCell>
                   <TableCell>{transaction.mpesaReference || "-"}</TableCell>
                   <TableCell className="text-right">
                     KES {(isRenewalAccount ? Math.abs(transaction.amount) : transaction.amount).toLocaleString()}

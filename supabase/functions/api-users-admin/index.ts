@@ -24,6 +24,21 @@ function normalizeUsername(username: unknown): string {
   return String(username || "").trim().toLowerCase();
 }
 
+function nestedAudit(
+  supabase: ReturnType<typeof createClient>,
+  claims: { sub?: string; role?: string; sid?: string },
+  action: string,
+  metadata: Record<string, unknown>,
+) {
+  return supabase.from("audit_logs").insert({
+    action,
+    table_name: "users",
+    user_id: String(claims.sub || "") || null,
+    status: "success",
+    metadata: { ...metadata, session_id: claims.sid || null },
+  });
+}
+
 function randomPassword(length = 12): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%^&*";
   const bytes = new Uint8Array(length);
@@ -77,6 +92,9 @@ serve(async (req) => {
         .eq("id", userId);
 
       if (error) throw error;
+      try {
+        await nestedAudit(supabase, claims, "USER_STATUS_UPDATE", { target_user_id: userId, is_active: isActive });
+      } catch { /* audit must not block admin action */ }
       return jsonResponse(200, { success: true });
     }
 
@@ -98,6 +116,9 @@ serve(async (req) => {
         .eq("id", userId);
 
       if (error) throw error;
+      try {
+        await nestedAudit(supabase, claims, "USER_ROLE_UPDATE", { target_user_id: userId, role });
+      } catch { /* audit must not block admin action */ }
       return jsonResponse(200, { success: true });
     }
 
@@ -119,6 +140,9 @@ serve(async (req) => {
 
       if (error) throw error;
 
+      try {
+        await nestedAudit(supabase, claims, "USER_PASSWORD_RESET", { target_user_id: userId });
+      } catch { /* audit must not block admin action */ }
       return jsonResponse(200, {
         success: true,
         temporary_password: incoming ? null : nextPassword,
@@ -171,6 +195,13 @@ serve(async (req) => {
 
       if (error) throw error;
 
+      try {
+        await nestedAudit(supabase, claims, "USER_CREATE", {
+          target_user_id: (data as Record<string, unknown>)?.id || null,
+          username: (data as Record<string, unknown>)?.username || null,
+          role: (data as Record<string, unknown>)?.role || null,
+        });
+      } catch { /* audit must not block admin action */ }
       return jsonResponse(200, {
         success: true,
         user: data,
@@ -203,6 +234,12 @@ serve(async (req) => {
         if (deleteUsersError) throw deleteUsersError;
       }
 
+      try {
+        await nestedAudit(supabase, claims, "USER_DELETE_MEMBER_LINKS", {
+          member_id: memberId,
+          deleted_user_count: userIds.length,
+        });
+      } catch { /* audit must not block admin action */ }
       return jsonResponse(200, { success: true, deleted_user_count: userIds.length });
     }
 

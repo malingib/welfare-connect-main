@@ -1,6 +1,10 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { requirePrivilegedRole, verifyAppJwtFromRequest } from "../_shared/app_jwt.ts";
+import {
+  requirePrivilegedRole,
+  verifyAppJwtFromRequest,
+  type AppJwtPayload,
+} from "../_shared/app_jwt.ts";
 
 import { buildCorsHeaders } from "../_shared/cors.ts";
 
@@ -47,6 +51,8 @@ async function getNetPaidForCase(
     .in("transaction_type", [
       "contribution",
       "case_wallet_deduction",
+      "arrears",
+      "late_payment",
       "contribution_refund",
       "case_wallet_refund",
     ])
@@ -57,7 +63,7 @@ async function getNetPaidForCase(
   return data.reduce((total: number, row: Record<string, unknown>) => {
     const txType = String(row.transaction_type || "").toLowerCase().trim();
     const amount = Number(row.amount || 0);
-    if (txType === "contribution" || txType === "case_wallet_deduction") {
+    if (txType === "contribution" || txType === "case_wallet_deduction" || txType === "arrears" || txType === "late_payment") {
       return total + Math.abs(amount);
     }
     if (txType === "contribution_refund" || txType === "case_wallet_refund") {
@@ -70,6 +76,7 @@ async function getNetPaidForCase(
 async function runEdgeBulkDeduct(
   caseRef: string,
   memberIds: string[],
+  claims: AppJwtPayload,
 ): Promise<Record<string, unknown>> {
   const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
@@ -172,6 +179,8 @@ async function runEdgeBulkDeduct(
       metadata: {
         source: "edge_bulk_deduct_case",
         case_number: caseNumber,
+        session_id: claims.sid || null,
+        actor_user_id: String(claims.sub || "") || null,
       },
     };
 
@@ -257,7 +266,7 @@ serve(async (req) => {
 
     if (!res.ok) {
       if (isVercelDeny(res.status, parsed, text)) {
-        const fallback = await runEdgeBulkDeduct(case_id, member_ids);
+        const fallback = await runEdgeBulkDeduct(case_id, member_ids, claims);
         return jsonResponse(200, { ...fallback, upstream_fallback: "vercel_denied_legacy" }, req.headers.get("Origin"));
       }
 

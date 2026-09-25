@@ -37,7 +37,7 @@ import {
 } from '@/components/ui/select';
 import type { Database } from '@/integrations/supabase/types';
 import { persistentCache } from '@/lib/cache';
-import { getAppToken } from '@/lib/appAuth';
+import { auditStamp, getAppToken } from '@/lib/appAuth';
 import { createReportFilename, exportRowsToCSV, exportRowsToXLSX } from '@/lib/reportExport';
 import { CASE_ROW_COLUMNS, MEMBER_DETAIL_COLUMNS } from '@/lib/supabaseSelectColumns';
 
@@ -162,6 +162,7 @@ const fetchCaseContributionTransactions = async (caseId: string, caseNumber: str
           'case_wallet_deduction',
           'case_wallet_refund',
           'arrears',
+          'late_payment',
         ]);
  
       const { data, error } = await applyFilter(baseQuery)
@@ -202,7 +203,7 @@ const calculateContributionTotals = (transactions: CaseContributionTransactionRo
     const amount = Number(tx.amount) || 0;
     const type = String(tx.transaction_type || '').toLowerCase();
 
-    if (type === 'contribution' || type === 'case_wallet_deduction' || type === 'arrears') {
+    if (type === 'contribution' || type === 'case_wallet_deduction' || type === 'arrears' || type === 'late_payment') {
       totalContributions += Math.abs(amount);
       continue;
     }
@@ -238,7 +239,7 @@ const buildContributionActivity = (transactions: CaseContributionTransactionRow[
     };
 
     const amount = Number(tx.amount) || 0;
-    if (tx.transaction_type === 'contribution' || tx.transaction_type === 'case_wallet_deduction' || tx.transaction_type === 'arrears') {
+    if (tx.transaction_type === 'contribution' || tx.transaction_type === 'case_wallet_deduction' || tx.transaction_type === 'arrears' || tx.transaction_type === 'late_payment') {
       existing.grossContributed += Math.abs(amount);
     }
 
@@ -909,6 +910,7 @@ const CaseDetails = () => {
             metadata: {
               source: 'case_revert_contributions',
               case_number: caseData.caseNumber,
+              ...auditStamp(),
             },
             created_at: new Date().toISOString(),
           });

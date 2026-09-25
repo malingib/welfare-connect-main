@@ -33,7 +33,7 @@ const ArrearsAccount = () => {
           transactionType: 'arrears',
           mpesaReference: item.mpesa_reference,
           createdAt: new Date(item.created_at),
-          description: item.description || (item.case_id ? 'Late case payment (default account)' : 'Arrears deduction'),
+          description: item.description || 'Arrears deduction',
         }));
 
       setTransactions(formattedData);

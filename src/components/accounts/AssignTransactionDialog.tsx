@@ -4,6 +4,7 @@ import { useForm } from "react-hook-form";
 import * as z from "zod";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { auditStamp } from "@/lib/appAuth";
 import type { Database } from "@/integrations/supabase/types";
 import { Transaction } from "@/lib/types";
 
@@ -113,6 +114,10 @@ const AssignTransactionDialog = ({
         mpesa_reference: transaction.mpesaReference || null,
         description: values.description,
         created_at: new Date().toISOString(),
+        metadata: {
+          source: "suspense_assign",
+          ...auditStamp(),
+        },
       };
 
       const { error: transactionError } = await (supabase.from("transactions") as any).insert(

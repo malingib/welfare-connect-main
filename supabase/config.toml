@@ -16,9 +16,21 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.api-sms-templates]
-verify_jwt = true
+verify_jwt = false
 
 [functions.api-notifications-mark-read]
+verify_jwt = false
+
+[functions.api-notifications-list]
+verify_jwt = false
+
+[functions.api-settings]
+verify_jwt = false
+
+[functions.api-sms-summary]
+verify_jwt = false
+
+[functions.api-members-list]
 verify_jwt = false
 
 [functions.mpesa-reversal]

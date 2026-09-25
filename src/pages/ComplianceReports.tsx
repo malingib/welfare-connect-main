@@ -46,9 +46,18 @@ interface AuditEntry {
   table_name: string
   status: string
   created_at: string
+  timestamp?: string
   user_id?: string
   member_id?: string
+  record_id?: string
   metadata?: any
+  actor_kind?: string
+  actor_name?: string
+  actor_detail?: string
+  member_number?: string
+  member_name?: string
+  subject_label?: string
+  session_id?: string
 }
 
 interface ReversalEntry {
@@ -107,6 +116,120 @@ interface CasePaymentSummaryRow {
 
 const ITEMS_PER_PAGE = 15
 const MAX_EXPORT_ENTRIES = 200
+
+const prettifyAction = (action: unknown) =>
+  String(action || 'Unknown action').replace(/_/g, ' ').toLowerCase()
+    .replace(/\b\w/g, (c) => c.toUpperCase())
+
+const formatAuditTimestamp = (log: AuditEntry) => {
+  const raw = log.created_at || log.timestamp
+  const d = new Date(raw)
+  if (Number.isNaN(d.getTime())) return '-'
+  return format(d, 'dd MMM yyyy, HH:mm:ss')
+}
+
+const formatAuditActor = (log: AuditEntry): { name: string; detail: string } => {
+  if (log.actor_name) {
+    return { name: log.actor_name, detail: log.actor_detail || '' }
+  }
+  if (log.member_name || log.member_number) {
+    return {
+      name: log.member_name || 'Member',
+      detail: log.member_number ? `#${log.member_number}` : '',
+    }
+  }
+  if (log.member_id) return { name: 'Member', detail: `#${String(log.member_id).substring(0, 8)}` }
+  if (log.user_id) return { name: 'User', detail: `#${String(log.user_id).substring(0, 8)}` }
+  return { name: 'System', detail: 'automated' }
+}
+
+const describeAuditLog = (log: AuditEntry): string => {
+  const meta = (log.metadata || {}) as Record<string, unknown>
+  const str = (v: unknown) => String(v ?? '').trim()
+  const action = String(log.action || '')
+  const table = String(log.table_name || '')
+  switch (action) {
+    case 'LOGIN':
+      return `Sign-in on ${table || 'portal'}`
+    case 'LOGIN_FAILED':
+      return 'Failed sign-in attempt'
+    case 'SMS_SENT':
+      return `SMS sent to ${str(meta.phone_number) || 'member'}` +
+        (meta.trigger_key ? ` (${str(meta.trigger_key).replace(/_/g, ' ')})` : '')
+    case 'SMS_FAILED':
+      return `SMS failed to ${str(meta.phone_number) || 'member'}`
+    case 'MPESA_CALLBACK_RECEIVED':
+      return 'M-Pesa payment callback received'
+    case 'STK_PUSH_INITIATED':
+      return `STK push initiated${meta.amount ? ` for KES ${Number(meta.amount).toLocaleString()}` : ''}`
+    case 'STK_CALLBACK_ERROR':
+    case 'STK_CALLBACK_INVALID_FORMAT':
+      return prettifyAction(action)
+    case 'PAYMENT_FAILED':
+      return `Payment failed${meta.amount ? ` (KES ${Number(meta.amount).toLocaleString()})` : ''}`
+    case 'MEMBER_STATUS_UPDATE':
+      return `Member status ${str(meta.from_status) && str(meta.to_status) ? `${meta.from_status} → ${meta.to_status}` : 'updated'}`
+    case 'SUSPENSE_AUTO_MATCH':
+      return 'Suspense payment auto-matched'
+    case 'PROBATION_AUTO_UPDATE':
+      return 'Probation status auto-updated'
+    case 'SETTINGS_UPDATE':
+      return 'Settings updated'
+    case 'FEE_COLLECTION':
+      return `Fee collected${meta.fee_type ? `: ${meta.fee_type}` : ''}${meta.amount ? ` (KES ${Number(meta.amount).toLocaleString()})` : ''}`
+    case 'INSERT':
+      return `Created ${table || 'record'}` +
+        (meta.case_number ? ` for case #${meta.case_number}` : '') +
+        (meta.amount ? ` (KES ${Number(meta.amount).toLocaleString()})` : '')
+    case 'UPDATE':
+      return `Updated ${table || 'record'}`
+    case 'DELETE':
+      return `Deleted ${table || 'record'}`
+    case 'LOGIN_BLOCKED_UNHASHED_PASSWORD':
+      return 'Sign-in blocked — password reset required'
+    case 'WALLET_FUNDING':
+      return `Wallet funded${meta.amount ? ` (KES ${Number(meta.amount).toLocaleString()})` : ''}`
+    case 'WALLET_ADJUSTMENT':
+      return `Wallet adjusted${meta.amount ? ` (KES ${Number(meta.amount).toLocaleString()})` : ''}${meta.reason ? ` — ${meta.reason}` : ''}`
+    case 'WALLET_TRANSFER':
+      return `Wallet transfer${meta.amount ? ` (KES ${Number(meta.amount).toLocaleString()})` : ''}`
+    case 'DISBURSEMENT':
+      return `Case disbursement${meta.amount ? ` (KES ${Number(meta.amount).toLocaleString()})` : ''}`
+    case 'CASE_DEDUCTION':
+      return 'Case wallet deduction'
+    case 'CASE_PAYMENT':
+      return 'Case payment received'
+    case 'LATE_PAYMENT':
+      return 'Late payment for closed case'
+    case 'ARREARS_POSTING':
+      return 'Arrears posting'
+    case 'CASE_REFUND':
+      return `Case contribution refund${meta.amount ? ` (KES ${Number(meta.amount).toLocaleString()})` : ''}`
+    case 'FEE_POSTING':
+    case 'PENALTY_POSTING':
+      return prettifyAction(action)
+    case 'USER_CREATE':
+      return `User account created${meta.username ? ` (@${meta.username})` : ''}`
+    case 'USER_ROLE_UPDATE':
+      return `User role changed${meta.role ? ` to ${meta.role}` : ''}`
+    case 'USER_STATUS_UPDATE':
+      return `User account ${meta.is_active === false ? 'deactivated' : 'activated'}`
+    case 'USER_PASSWORD_RESET':
+      return 'User password reset'
+    case 'USER_DELETE_MEMBER_LINKS':
+      return `Removed ${Number(meta.deleted_user_count || 0)} linked user(s)`
+    default:
+      return table ? `${prettifyAction(action)} (${table})` : prettifyAction(action)
+  }
+}
+
+const auditDetails = (log: AuditEntry): string => {
+  const base = describeAuditLog(log)
+  const subject = String(log.subject_label || '').trim()
+  if (!subject) return base
+  if (base.toLowerCase().includes(subject.toLowerCase())) return base
+  return `${base} — ${subject}`
+}
 const FAILED_TRANSACTION_STATUSES = ['failed', 'error', 'cancelled', 'canceled', 'reversed', 'voided']
 const COMPLIANCE_MEMBER_STATUSES = ['active', 'probation']
 
@@ -123,6 +246,7 @@ const ComplianceReports = () => {
   const [loading, setLoading] = useState(true)
   const [auditPage, setAuditPage] = useState(1)
   const [auditSearch, setAuditSearch] = useState('')
+  const [auditSession, setAuditSession] = useState<string>('all')
   const [severityFilter, setSeverityFilter] = useState<string>('all')
   const [datePreset, setDatePreset] = useState<'7days' | '30days' | '90days' | 'thisYear' | 'all'>('30days')
   const [showFilters, setShowFilters] = useState(false)
@@ -144,7 +268,7 @@ const ComplianceReports = () => {
 
   const fetchAuditLogs = async () => {
     try {
-      const data = (await invokeWithAppToken<{ logs?: Record<string, unknown>[] }>('api-audit-logs', { limit: 100 })) as any
+      const data = (await invokeWithAppToken<{ logs?: Record<string, unknown>[] }>('api-audit-logs', { limit: 500 })) as any
       const logs = ((data?.logs || []) as Record<string, unknown>[]).map((row) => ({
         ...row,
         created_at: (row.created_at as string) || (row.timestamp as string),
@@ -408,25 +532,51 @@ const ComplianceReports = () => {
     }
   }, [datePreset])
 
+  const auditSessions = useMemo(() => {
+    const byId = new Map<string, { id: string; label: string; time: string }>()
+    for (const log of auditLogs) {
+      const sid = String(log.session_id || '')
+      if (!sid || byId.has(sid)) continue
+      const actor = formatAuditActor(log)
+      const isLogin = String(log.action || '').startsWith('LOGIN')
+      byId.set(sid, {
+        id: sid,
+        label: `${actor.name}${actor.detail ? ` (${actor.detail})` : ''}${isLogin ? '' : ' — no sign-in row in range'}`,
+        time: String(log.created_at || log.timestamp || ''),
+      })
+    }
+    return Array.from(byId.values()).sort((a, b) =>
+      new Date(b.time).getTime() - new Date(a.time).getTime())
+  }, [auditLogs])
+
   const filteredAuditLogs = useMemo(() => {
     const startDate = getAuditDateRange()
     return auditLogs.filter(log => {
       const logDate = new Date(log.created_at)
       if (logDate < startDate) return false
+      if (auditSession !== 'all' && String(log.session_id || '') !== auditSession) return false
       if (auditSearch) {
         const search = auditSearch.toLowerCase()
+        const actor = formatAuditActor(log)
         const matches = [
           log.action,
           log.table_name,
           log.status,
           log.member_id,
-          log.user_id
+          log.user_id,
+          log.actor_name,
+          log.actor_detail,
+          log.member_number,
+          log.member_name,
+          actor.name,
+          actor.detail,
+          auditDetails(log),
         ].some(v => v?.toLowerCase().includes(search))
         if (!matches) return false
       }
       return true
     })
-  }, [auditLogs, getAuditDateRange, auditSearch])
+  }, [auditLogs, getAuditDateRange, auditSearch, auditSession])
 
   const paginatedAuditLogs = useMemo(() => {
     const start = (auditPage - 1) * ITEMS_PER_PAGE
@@ -518,6 +668,7 @@ const ComplianceReports = () => {
   const clearFilters = () => {
     setDatePreset('30days')
     setAuditSearch('')
+    setAuditSession('all')
     setSeverityFilter('all')
     setAuditPage(1)
   }
@@ -547,16 +698,19 @@ const ComplianceReports = () => {
         doc.text(`Note: Export limited to first ${MAX_EXPORT_ENTRIES} entries. Total entries: ${filteredAuditLogs.length}`, 14, 34)
       }
       
-      const tableData = logsToExport.map((log) => [
-        format(new Date(log.created_at), 'dd MMM yyyy HH:mm'),
-        log.action,
-        log.table_name || '-',
-        log.status,
-        log.member_id ? `Member: ${log.member_id}` : log.user_id ? `User: ${log.user_id}` : '-',
-      ])
+      const tableData = logsToExport.map((log) => {
+        const actor = formatAuditActor(log)
+        return [
+          formatAuditTimestamp(log),
+          actor.detail ? `${actor.name} (${actor.detail})` : actor.name,
+          log.action,
+          auditDetails(log),
+          log.status,
+        ]
+      })
       
       ;(doc as any).autoTable({
-        head: [['Date/Time', 'Action', 'Table', 'Status', 'Reference']],
+        head: [['Date/Time', 'Actor', 'Action', 'Details', 'Status']],
         body: tableData,
         startY: filteredAuditLogs.length > MAX_EXPORT_ENTRIES ? 40 : 35,
         styles: { fontSize: 8 },
@@ -582,14 +736,17 @@ const ComplianceReports = () => {
         toast({ title: 'No data to export', description: 'Adjust filters and try again.', variant: 'destructive' })
         return
       }
-      const headers = ['Date/Time', 'Action', 'Table', 'Status', 'Reference']
-      const rows = logsToExport.map(log => [
-        format(new Date(log.created_at), 'dd MMM yyyy HH:mm'),
-        log.action,
-        log.table_name || '-',
-        log.status,
-        log.member_id ? `Member: ${log.member_id}` : log.user_id ? `User: ${log.user_id}` : '-',
-      ])
+      const headers = ['Date/Time', 'Actor', 'Action', 'Details', 'Status']
+      const rows = logsToExport.map(log => {
+        const actor = formatAuditActor(log)
+        return [
+          formatAuditTimestamp(log),
+          actor.detail ? `${actor.name} (${actor.detail})` : actor.name,
+          log.action,
+          auditDetails(log),
+          log.status,
+        ]
+      })
 
       let csvContent = headers.join(',') + '\n'
       rows.forEach(row => {
@@ -836,7 +993,7 @@ const ComplianceReports = () => {
               ) : (
                 <>
                   <div className="text-2xl font-bold">{auditLogs.length}</div>
-                  <p className="text-xs text-muted-foreground">Last 100 entries</p>
+                  <p className="text-xs text-muted-foreground">Last 500 entries</p>
                 </>
               )}
             </CardContent>
@@ -1221,9 +1378,22 @@ const ComplianceReports = () => {
                 <div className="flex justify-between items-center">
                   <div>
                     <CardTitle>Audit Trail</CardTitle>
-                    <CardDescription>System activity log for all actions</CardDescription>
+                    <CardDescription>Who did what, and when — every system action with actor and timestamp</CardDescription>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap gap-2 items-center">
+                    <Select value={auditSession} onValueChange={(v) => { setAuditSession(v); setAuditPage(1) }}>
+                      <SelectTrigger className="w-full sm:w-[260px]">
+                        <SelectValue placeholder="Filter by session" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All sessions</SelectItem>
+                        {auditSessions.map((s) => (
+                          <SelectItem key={s.id} value={s.id}>
+                            {s.label} — {s.time ? format(new Date(s.time), 'dd MMM HH:mm') : ''}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                     <Button variant="outline" size="sm" onClick={exportAuditToCSV}>
                       <Download className="h-4 w-4 mr-2" />
                       Export CSV
@@ -1240,11 +1410,11 @@ const ComplianceReports = () => {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Timestamp</TableHead>
+                        <TableHead>Date/Time</TableHead>
+                        <TableHead>Actor</TableHead>
                         <TableHead>Action</TableHead>
-                        <TableHead>Table</TableHead>
+                        <TableHead>Details</TableHead>
                         <TableHead>Status</TableHead>
-                        <TableHead>Reference</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -1257,29 +1427,33 @@ const ComplianceReports = () => {
                           </TableCell>
                         </TableRow>
                       ) : (
-                        paginatedAuditLogs.data.map((log) => (
-                          <TableRow key={log.id}>
-                            <TableCell className="text-sm">
-                              {format(new Date(log.created_at), 'dd MMM yyyy HH:mm')}
-                            </TableCell>
-                            <TableCell className="font-medium">{log.action}</TableCell>
-                            <TableCell className="text-sm text-muted-foreground">
-                              {log.table_name || '-'}
-                            </TableCell>
-                            <TableCell>
-                              <Badge variant={log.status === 'success' ? 'default' : 'destructive'}>
-                                {log.status}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="text-sm text-muted-foreground">
-                              {log.member_id 
-                                ? `Member: ${log.member_id.substring(0, 8)}...` 
-                                : log.user_id 
-                                  ? `User: ${log.user_id.substring(0, 8)}...`
-                                  : '-'}
-                            </TableCell>
-                          </TableRow>
-                        ))
+                        paginatedAuditLogs.data.map((log) => {
+                          const actor = formatAuditActor(log)
+                          return (
+                            <TableRow key={log.id}>
+                              <TableCell className="text-sm whitespace-nowrap">
+                                {formatAuditTimestamp(log)}
+                              </TableCell>
+                              <TableCell>
+                                <div className="font-medium">{actor.name}</div>
+                                {actor.detail && (
+                                  <div className="text-xs text-muted-foreground">{actor.detail}</div>
+                                )}
+                              </TableCell>
+                              <TableCell>
+                                <Badge variant="outline">{log.action}</Badge>
+                              </TableCell>
+                              <TableCell className="text-sm text-muted-foreground">
+                                {auditDetails(log)}
+                              </TableCell>
+                              <TableCell>
+                                <Badge variant={log.status === 'success' ? 'default' : 'destructive'}>
+                                  {log.status}
+                                </Badge>
+                              </TableCell>
+                            </TableRow>
+                          )
+                        })
                       )}
                     </TableBody>
                   </Table>

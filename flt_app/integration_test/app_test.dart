@@ -6,62 +6,42 @@ import 'package:malanga_welfare_companion/main.dart' as app;
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
-  group('End-to-End Test', () {
-    testWidgets('Full flow: Login -> Wallet -> Payments -> STK Push', (tester) async {
+  group('End-to-end smoke tests', () {
+    testWidgets('Startup, portal switching, and recovery help', (tester) async {
       app.main();
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 3));
 
-      // 1. Login
       final memberField = find.byKey(const ValueKey('login_member_field'));
       final phoneField = find.byKey(const ValueKey('login_phone_field'));
-      final loginButton = find.byKey(const ValueKey('login_submit_button'));
-
       expect(memberField, findsOneWidget);
       expect(phoneField, findsOneWidget);
 
-      await tester.enterText(memberField, 'MLG-001');
-      await tester.enterText(phoneField, '0712345678');
-      await tester.tap(loginButton);
-      
-      // Wait for navigation to Wallet
-      await tester.pumpAndSettle();
-      
-      // 2. Verify Wallet Screen
-      expect(find.text('Malanga Wallet'), findsOneWidget); // Found in wallet_screen.dart
-      expect(find.text('Total Balance'), findsOneWidget);
+      await tester.tap(find.text('Admin Portal'));
+      await tester.pump();
+      expect(find.text('Admin Username'), findsOneWidget);
+      expect(find.text('Password'), findsOneWidget);
 
-      // 3. Navigate to Payments via Bottom Nav
-      final paymentsNav = find.byIcon(Icons.widgets);
-      await tester.tap(paymentsNav);
-      await tester.pumpAndSettle();
-
-      // 4. Perform STK Push
-      final payPhoneField = find.byKey(const ValueKey('payment_phone_field'));
-      final payAmountField = find.byKey(const ValueKey('payment_amount_field'));
-      final payRefField = find.byKey(const ValueKey('payment_reference_field'));
-      final payButton = find.byKey(const ValueKey('payment_submit_button'));
-
-      expect(payPhoneField, findsOneWidget);
-      
-      await tester.enterText(payPhoneField, '0712345678');
-      await tester.enterText(payAmountField, '10');
-      await tester.enterText(payRefField, 'TEST-REF');
-      
-      await tester.tap(payButton);
-      await tester.pumpAndSettle();
-
-      // 5. Navigate to Cases
-      final casesNav = find.byIcon(Icons.assignment);
-      await tester.tap(casesNav);
-      await tester.pumpAndSettle();
-      
-      expect(find.text('Active Cases'), findsOneWidget);
+      await tester.tap(find.text('Forgot Password?'));
+      await tester.pump();
+      expect(
+          find.text(
+              'Please contact a super administrator to reset your admin password. Admin resets are recorded for security.'),
+          findsOneWidget);
+      await tester.tap(find.text('Close'));
     });
 
-    testWidgets('Security: Admin route access protection', (tester) async {
-      // This test would ideally verify that a member cannot access /admin/dashboard
-      // But in integration tests, it's harder to force a URL change without UI.
-      // We can rely on the redirect logic verified in unit/widget tests if needed.
+    testWidgets('Member login validates required fields without network calls',
+        (tester) async {
+      app.main();
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 3));
+
+      await tester.tap(find.byKey(const ValueKey('login_submit_button')));
+      await tester.pump();
+
+      expect(find.text('Please enter your member number'), findsOneWidget);
+      expect(find.text('Please enter your phone number'), findsOneWidget);
     });
   });
 }

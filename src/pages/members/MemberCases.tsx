@@ -35,6 +35,7 @@ const MemberCases = () => {
         "contribution",
         "case_wallet_deduction",
         "arrears",
+        "late_payment",
         "contribution_refund",
         "case_wallet_refund",
       ].includes(String(t.transaction_type || ""));
@@ -85,6 +86,7 @@ const MemberCases = () => {
             "contribution",
             "case_wallet_deduction",
             "arrears",
+            "late_payment",
             "contribution_refund",
             "case_wallet_refund",
             "wallet_funding",
@@ -192,6 +194,7 @@ const MemberCases = () => {
         "contribution",
         "case_wallet_deduction",
         "arrears",
+        "late_payment",
         "contribution_refund",
         "case_wallet_refund",
       ].includes(txType);
@@ -210,7 +213,7 @@ const MemberCases = () => {
 
   const hasContributed = (caseItem: any) =>
     getCaseContributionTransactions(caseItem).some((t) =>
-      ["contribution", "case_wallet_deduction", "arrears"].includes(
+      ["contribution", "case_wallet_deduction", "arrears", "late_payment"].includes(
         String(t.transaction_type || ""),
       ),
     );
@@ -220,7 +223,7 @@ const MemberCases = () => {
 
   const getContributionBadge = (caseItem: any) => {
     const contributed = getCaseContributionTransactions(caseItem).some((t) =>
-      ["contribution", "case_wallet_deduction", "arrears"].includes(
+      ["contribution", "case_wallet_deduction", "arrears", "late_payment"].includes(
         String(t.transaction_type || ""),
       ),
     );

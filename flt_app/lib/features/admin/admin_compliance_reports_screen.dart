@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/constants/app_constants.dart';
+import '../../core/services/export_service.dart';
 import '../../core/services/live_data_service.dart';
 import '../auth/auth_controller.dart';
 import 'admin_shell.dart';
@@ -27,6 +28,80 @@ class _AdminComplianceReportsScreenState
 
   int _auditPage = 1;
   final int _pageSize = 15;
+  DateTimeRange? _dateRange;
+
+  List<Map<String, dynamic>> _filterRows(
+    List<Map<String, dynamic>> rows,
+    String dateKey,
+  ) {
+    final range = _dateRange;
+    if (range == null) return rows;
+    return rows.where((row) {
+      final value = DateTime.tryParse(row[dateKey]?.toString() ?? '');
+      if (value == null) return false;
+      final date = value.toLocal();
+      final start =
+          DateTime(range.start.year, range.start.month, range.start.day);
+      final end =
+          DateTime(range.end.year, range.end.month, range.end.day, 23, 59, 59);
+      return !date.isBefore(start) && !date.isAfter(end);
+    }).toList();
+  }
+
+  Future<void> _pickDateRange() async {
+    final range = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now(),
+      initialDateRange: _dateRange,
+    );
+    if (range != null && mounted) {
+      setState(() {
+        _dateRange = range;
+        _auditPage = 1;
+      });
+    }
+  }
+
+  Future<void> _exportReport({
+    required String title,
+    required List<String> headers,
+    required List<List<dynamic>> rows,
+    required bool pdf,
+  }) async {
+    if (rows.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('There is no data to export.')),
+      );
+      return;
+    }
+    try {
+      final bytes = pdf
+          ? await generatePdfFile(
+              title: title,
+              headers: headers,
+              rows: rows,
+              money: money,
+            )
+          : await generateExcelFile(
+              title: title,
+              headers: headers,
+              rows: rows,
+            );
+      await shareFile(
+        title: exportFilename(
+                title.toLowerCase().replaceAll(' ', '_'), pdf ? 'pdf' : 'xlsx')
+            .replaceAll(RegExp(r'\.(pdf|xlsx)$'), ''),
+        bytes: bytes,
+        ext: pdf ? 'pdf' : 'xlsx',
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Export failed: $e')),
+      );
+    }
+  }
 
   @override
   void initState() {
@@ -215,8 +290,8 @@ class _AdminComplianceReportsScreenState
             ),
             const SizedBox(height: 10),
             Text(value,
-                style: const TextStyle(
-                    fontWeight: FontWeight.bold, fontSize: 18)),
+                style:
+                    const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
             const SizedBox(height: 4),
             Text(
               label,
@@ -243,15 +318,17 @@ class _AdminComplianceReportsScreenState
     return Row(
       children: [
         OutlinedButton.icon(
-          onPressed: () {},
+          onPressed: _pickDateRange,
           icon: const Icon(Icons.filter_list, size: 16),
-          label: const Text('Filters'),
+          label: Text(_dateRange == null ? 'Date filter' : 'Date filtered'),
         ),
         const SizedBox(width: 8),
         OutlinedButton.icon(
-          onPressed: () {},
+          onPressed: _dateRange == null
+              ? null
+              : () => setState(() => _dateRange = null),
           icon: const Icon(Icons.date_range, size: 16),
-          label: const Text('Last 30 Days'),
+          label: const Text('Clear date filter'),
         ),
       ],
     );
@@ -265,10 +342,12 @@ class _AdminComplianceReportsScreenState
             !snapshot.hasData) {
           return const Center(child: CircularProgressIndicator());
         }
-        final rows = (snapshot.data ?? [])
-            .whereType<Map>()
-            .map((e) => e.cast<String, dynamic>())
-            .toList();
+        final rows = _filterRows(
+            (snapshot.data ?? [])
+                .whereType<Map>()
+                .map((e) => e.cast<String, dynamic>())
+                .toList(),
+            'created_at');
         return SingleChildScrollView(
           padding: const EdgeInsets.all(AppConstants.marginEdge),
           child: Column(
@@ -284,17 +363,79 @@ class _AdminComplianceReportsScreenState
                   Row(
                     children: [
                       OutlinedButton.icon(
-                        onPressed: () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('No data to export')),
-                          );
-                        },
+                        onPressed: () => _exportReport(
+                          title: 'case_payment_compliance',
+                          headers: const [
+                            'Case',
+                            'Type',
+                            'Status',
+                            'Eligible',
+                            'Paid',
+                            'Partial',
+                            'Unpaid',
+                            'Expected',
+                            'Net Paid',
+                            'Outstanding',
+                            'Paid %',
+                            'Members %'
+                          ],
+                          rows: rows
+                              .map((r) => [
+                                    r['case_number'],
+                                    r['case_type'],
+                                    r['case_status'],
+                                    r['eligible_members'],
+                                    r['paid_members'],
+                                    r['partial_members'],
+                                    r['unpaid_members'],
+                                    r['expected_total'],
+                                    r['net_paid_total'],
+                                    r['outstanding_total'],
+                                    r['paid_amount_percent'],
+                                    r['paid_members_percent'],
+                                  ])
+                              .toList(),
+                          pdf: false,
+                        ),
                         icon: const Icon(Icons.download, size: 16),
                         label: const Text('Summary CSV'),
                       ),
                       const SizedBox(width: 8),
                       OutlinedButton.icon(
-                        onPressed: () {},
+                        onPressed: () => _exportReport(
+                          title: 'case_payment_compliance',
+                          headers: const [
+                            'Case',
+                            'Type',
+                            'Status',
+                            'Eligible',
+                            'Paid',
+                            'Partial',
+                            'Unpaid',
+                            'Expected',
+                            'Net Paid',
+                            'Outstanding',
+                            'Paid %',
+                            'Members %'
+                          ],
+                          rows: rows
+                              .map((r) => [
+                                    r['case_number'],
+                                    r['case_type'],
+                                    r['case_status'],
+                                    r['eligible_members'],
+                                    r['paid_members'],
+                                    r['partial_members'],
+                                    r['unpaid_members'],
+                                    r['expected_total'],
+                                    r['net_paid_total'],
+                                    r['outstanding_total'],
+                                    r['paid_amount_percent'],
+                                    r['paid_members_percent'],
+                                  ])
+                              .toList(),
+                          pdf: true,
+                        ),
                         icon: const Icon(Icons.download, size: 16),
                         label: const Text('Summary PDF'),
                       ),
@@ -339,16 +480,22 @@ class _AdminComplianceReportsScreenState
                         cells: [
                           DataCell(Text('${r['case_number'] ?? '-'}')),
                           DataCell(Text('${r['case_type'] ?? '-'}'.capitalize)),
-                          DataCell(Text('${r['case_status'] ?? '-'}'.capitalize)),
+                          DataCell(
+                              Text('${r['case_status'] ?? '-'}'.capitalize)),
                           DataCell(Text('${r['eligible_members'] ?? 0}')),
                           DataCell(Text('${r['paid_members'] ?? 0}')),
                           DataCell(Text('${r['partial_members'] ?? 0}')),
                           DataCell(Text('${r['unpaid_members'] ?? 0}')),
-                          DataCell(Text(money.format(_toDouble(r['expected_total'])))),
-                          DataCell(Text(money.format(_toDouble(r['net_paid_total'])))),
-                          DataCell(Text(money.format(_toDouble(r['outstanding_total'])))),
-                          DataCell(Text('${_toDouble(r['paid_amount_percent']).toStringAsFixed(1)}%')),
-                          DataCell(Text('${_toDouble(r['paid_members_percent']).toStringAsFixed(1)}%')),
+                          DataCell(Text(
+                              money.format(_toDouble(r['expected_total'])))),
+                          DataCell(Text(
+                              money.format(_toDouble(r['net_paid_total'])))),
+                          DataCell(Text(
+                              money.format(_toDouble(r['outstanding_total'])))),
+                          DataCell(Text(
+                              '${_toDouble(r['paid_amount_percent']).toStringAsFixed(1)}%')),
+                          DataCell(Text(
+                              '${_toDouble(r['paid_members_percent']).toStringAsFixed(1)}%')),
                         ],
                       );
                     }).toList(),
@@ -369,10 +516,12 @@ class _AdminComplianceReportsScreenState
             !snapshot.hasData) {
           return const Center(child: CircularProgressIndicator());
         }
-        final rows = (snapshot.data ?? [])
-            .whereType<Map>()
-            .map((e) => e.cast<String, dynamic>())
-            .toList();
+        final rows = _filterRows(
+            (snapshot.data ?? [])
+                .whereType<Map>()
+                .map((e) => e.cast<String, dynamic>())
+                .toList(),
+            'created_at');
         final start = (_auditPage - 1) * _pageSize;
         final paged = rows.skip(start).take(_pageSize).toList();
         final totalPages = (rows.length / _pageSize).ceil();
@@ -391,17 +540,51 @@ class _AdminComplianceReportsScreenState
                   Row(
                     children: [
                       OutlinedButton.icon(
-                        onPressed: () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('No data to export')),
-                          );
-                        },
+                        onPressed: () => _exportReport(
+                          title: 'audit_trail',
+                          headers: const [
+                            'Timestamp',
+                            'Action',
+                            'Table',
+                            'Status',
+                            'Reference'
+                          ],
+                          rows: rows
+                              .map((r) => [
+                                    r['created_at'],
+                                    r['action'],
+                                    r['table_name'],
+                                    r['status'],
+                                    r['member_id'] ?? r['user_id'],
+                                  ])
+                              .toList(),
+                          pdf: false,
+                        ),
                         icon: const Icon(Icons.download, size: 16),
                         label: const Text('Export CSV'),
                       ),
                       const SizedBox(width: 8),
                       OutlinedButton.icon(
-                        onPressed: () {},
+                        onPressed: () => _exportReport(
+                          title: 'audit_trail',
+                          headers: const [
+                            'Timestamp',
+                            'Action',
+                            'Table',
+                            'Status',
+                            'Reference'
+                          ],
+                          rows: rows
+                              .map((r) => [
+                                    r['created_at'],
+                                    r['action'],
+                                    r['table_name'],
+                                    r['status'],
+                                    r['member_id'] ?? r['user_id'],
+                                  ])
+                              .toList(),
+                          pdf: true,
+                        ),
                         icon: const Icon(Icons.download, size: 16),
                         label: const Text('Export PDF'),
                       ),
@@ -492,7 +675,8 @@ class _AdminComplianceReportsScreenState
                     children: [
                       Text(
                         'Showing ${start + 1}-${start + paged.length} of ${rows.length}',
-                        style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                        style: const TextStyle(
+                            fontSize: 12, color: Color(0xFF64748B)),
                       ),
                       Row(
                         children: [
@@ -505,7 +689,8 @@ class _AdminComplianceReportsScreenState
                           ...List.generate(totalPages.clamp(0, 7), (i) {
                             final page = i + 1;
                             return Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 2),
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 2),
                               child: TextButton(
                                 onPressed: () =>
                                     setState(() => _auditPage = page),
@@ -549,10 +734,12 @@ class _AdminComplianceReportsScreenState
             !snapshot.hasData) {
           return const Center(child: CircularProgressIndicator());
         }
-        final rows = (snapshot.data ?? [])
-            .whereType<Map>()
-            .map((e) => e.cast<String, dynamic>())
-            .toList();
+        final rows = _filterRows(
+            (snapshot.data ?? [])
+                .whereType<Map>()
+                .map((e) => e.cast<String, dynamic>())
+                .toList(),
+            'reversal_date');
         return SingleChildScrollView(
           padding: const EdgeInsets.all(AppConstants.marginEdge),
           child: Column(
@@ -566,11 +753,30 @@ class _AdminComplianceReportsScreenState
                     style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
                   ),
                   OutlinedButton.icon(
-                    onPressed: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('No data to export')),
-                      );
-                    },
+                    onPressed: () => _exportReport(
+                      title: 'reversals_audit',
+                      headers: const [
+                        'Reversal Date',
+                        'Member',
+                        'Member Number',
+                        'Amount',
+                        'Reason',
+                        'Original Date',
+                        'Original Amount'
+                      ],
+                      rows: rows
+                          .map((r) => [
+                                r['reversal_date'],
+                                r['member_name'],
+                                r['member_number'],
+                                r['reversal_amount'],
+                                r['reason'],
+                                r['original_transaction_date'],
+                                r['original_amount'],
+                              ])
+                          .toList(),
+                      pdf: false,
+                    ),
                     icon: const Icon(Icons.download, size: 16),
                     label: const Text('Export CSV'),
                   ),
@@ -614,21 +820,25 @@ class _AdminComplianceReportsScreenState
                                 Text(
                                   r['member_number']?.toString() ?? '-',
                                   style: const TextStyle(
-                                      fontSize: 11,
-                                      color: Color(0xFF64748B)),
+                                      fontSize: 11, color: Color(0xFF64748B)),
                                 ),
                               ],
                             ),
                           ),
                           DataCell(
                             Text(
-                              money.format(_toDouble(r['reversal_amount']).abs()),
-                              style: const TextStyle(fontWeight: FontWeight.w700),
+                              money.format(
+                                  _toDouble(r['reversal_amount']).abs()),
+                              style:
+                                  const TextStyle(fontWeight: FontWeight.w700),
                             ),
                           ),
                           DataCell(Text(r['reason']?.toString() ?? '-')),
-                          DataCell(Text(r['original_transaction_date']?.toString() ?? '-')),
-                          DataCell(Text(money.format(_toDouble(r['original_amount']).abs()))),
+                          DataCell(Text(
+                              r['original_transaction_date']?.toString() ??
+                                  '-')),
+                          DataCell(Text(money
+                              .format(_toDouble(r['original_amount']).abs()))),
                         ],
                       );
                     }).toList(),
@@ -649,10 +859,12 @@ class _AdminComplianceReportsScreenState
             !snapshot.hasData) {
           return const Center(child: CircularProgressIndicator());
         }
-        final issues = (snapshot.data ?? [])
-            .whereType<Map>()
-            .map((e) => e.cast<String, dynamic>())
-            .toList();
+        final issues = _filterRows(
+            (snapshot.data ?? [])
+                .whereType<Map>()
+                .map((e) => e.cast<String, dynamic>())
+                .toList(),
+            'created_at');
         return SingleChildScrollView(
           padding: const EdgeInsets.all(AppConstants.marginEdge),
           child: Column(
@@ -666,11 +878,26 @@ class _AdminComplianceReportsScreenState
                     style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
                   ),
                   OutlinedButton.icon(
-                    onPressed: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('No data to export')),
-                      );
-                    },
+                    onPressed: () => _exportReport(
+                      title: 'compliance_issues',
+                      headers: const [
+                        'Created At',
+                        'Severity',
+                        'Issue',
+                        'Member',
+                        'Status'
+                      ],
+                      rows: issues
+                          .map((r) => [
+                                r['created_at'],
+                                r['severity'],
+                                r['issue'] ?? r['description'],
+                                r['member_number'] ?? r['member_id'],
+                                r['status'],
+                              ])
+                          .toList(),
+                      pdf: false,
+                    ),
                     icon: const Icon(Icons.download, size: 16),
                     label: const Text('Export CSV'),
                   ),
@@ -692,7 +919,8 @@ class _AdminComplianceReportsScreenState
                       SizedBox(width: 12),
                       Text(
                         'All Clear! No compliance issues detected.',
-                        style: TextStyle(color: Color(0xFF64748B), fontSize: 16),
+                        style:
+                            TextStyle(color: Color(0xFF64748B), fontSize: 16),
                       ),
                     ],
                   ),
@@ -723,7 +951,8 @@ class _AdminComplianceReportsScreenState
                                 const SizedBox(width: 12),
                                 Expanded(
                                   child: Text(
-                                    issue['issue_type']?.toString() ?? 'Unknown Issue',
+                                    issue['issue_type']?.toString() ??
+                                        'Unknown Issue',
                                     style: const TextStyle(
                                         fontWeight: FontWeight.w700,
                                         fontSize: 15),

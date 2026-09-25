@@ -676,7 +676,8 @@ class LiveDataService {
   Future<List<MemberDependant>> fetchDependants(String memberId) async {
     final rows = await _client
         .from('dependants')
-        .select('id, name, gender, relationship, date_of_birth, is_disabled, is_eligible')
+        .select(
+            'id, name, gender, relationship, date_of_birth, is_disabled, is_eligible')
         .eq('member_id', memberId)
         .order('name');
     return (rows as List)
@@ -692,7 +693,8 @@ class LiveDataService {
     final result = await _client
         .from('dependants')
         .insert(dependant.toInsertMap(memberId))
-        .select('id, name, gender, relationship, date_of_birth, is_disabled, is_eligible')
+        .select(
+            'id, name, gender, relationship, date_of_birth, is_disabled, is_eligible')
         .single();
     return MemberDependant.fromMap((result as Map).cast<String, dynamic>());
   }
@@ -705,7 +707,8 @@ class LiveDataService {
         .from('dependants')
         .update(dependant.toUpdateMap())
         .eq('id', dependantId)
-        .select('id, name, gender, relationship, date_of_birth, is_disabled, is_eligible')
+        .select(
+            'id, name, gender, relationship, date_of_birth, is_disabled, is_eligible')
         .single();
     return MemberDependant.fromMap((result as Map).cast<String, dynamic>());
   }
@@ -933,6 +936,24 @@ class LiveDataService {
     final payload =
         (response.data as Map?)?.cast<String, dynamic>() ?? const {};
     return (payload['settings'] as Map?)?.cast<String, dynamic>();
+  }
+
+  Future<List<String>> fetchResidences() async {
+    final rows = await _client
+        .from('residences')
+        .select('name')
+        .not('name', 'is', null)
+        .order('name');
+    return rows
+        .whereType<Map>()
+        .map((row) => row['name']?.toString().trim() ?? '')
+        .where((name) => name.isNotEmpty)
+        .toSet()
+        .toList();
+  }
+
+  Future<void> createResidence({required String name}) async {
+    await _client.from('residences').insert({'name': name.trim()});
   }
 
   Future<Map<String, dynamic>> fetchReportsSummary({
@@ -1303,7 +1324,8 @@ class LiveDataService {
     return double.tryParse(value.toString()) ?? 0;
   }
 
-  Future<List<Map<String, dynamic>>> fetchReportContributions({required String appToken, Map<String, dynamic>? filters}) async {
+  Future<List<Map<String, dynamic>>> fetchReportContributions(
+      {required String appToken, Map<String, dynamic>? filters}) async {
     try {
       final response = await _supabaseService.invokeFunction(
         'api-reports-summary',
@@ -1312,19 +1334,23 @@ class LiveDataService {
       if (response.status < 200 || response.status >= 300) {
         return const <Map<String, dynamic>>[];
       }
-      final payload = (response.data as Map?)?.cast<String, dynamic>() ?? const {};
-      final report = (payload['report'] as Map?)?.cast<String, dynamic>() ?? const {};
+      final payload =
+          (response.data as Map?)?.cast<String, dynamic>() ?? const {};
+      final report =
+          (payload['report'] as Map?)?.cast<String, dynamic>() ?? const {};
       final monthlyData = (report['monthly_contributions'] as List?)
-          ?.whereType<Map>()
-          .map((e) => e.cast<String, dynamic>())
-          .toList() ?? const <Map<String, dynamic>>[];
+              ?.whereType<Map>()
+              .map((e) => e.cast<String, dynamic>())
+              .toList() ??
+          const <Map<String, dynamic>>[];
       return monthlyData;
     } catch (_) {
       return const <Map<String, dynamic>>[];
     }
   }
 
-  Future<List<Map<String, dynamic>>> fetchReportTransactions({required String appToken, Map<String, dynamic>? filters}) async {
+  Future<List<Map<String, dynamic>>> fetchReportTransactions(
+      {required String appToken, Map<String, dynamic>? filters}) async {
     final limit = (filters?['limit'] as int?) ?? 200;
     final offset = (filters?['offset'] as int?) ?? 0;
     try {
@@ -1340,17 +1366,20 @@ class LiveDataService {
       if (response.status < 200 || response.status >= 300) {
         return const <Map<String, dynamic>>[];
       }
-      final payload = (response.data as Map?)?.cast<String, dynamic>() ?? const {};
+      final payload =
+          (response.data as Map?)?.cast<String, dynamic>() ?? const {};
       return (payload['transactions'] as List?)
-          ?.whereType<Map>()
-          .map((e) => e.cast<String, dynamic>())
-          .toList() ?? const <Map<String, dynamic>>[];
+              ?.whereType<Map>()
+              .map((e) => e.cast<String, dynamic>())
+              .toList() ??
+          const <Map<String, dynamic>>[];
     } catch (_) {
       return const <Map<String, dynamic>>[];
     }
   }
 
-  Future<List<Map<String, dynamic>>> fetchReportDefaulters({required String appToken, Map<String, dynamic>? filters}) async {
+  Future<List<Map<String, dynamic>>> fetchReportDefaulters(
+      {required String appToken, Map<String, dynamic>? filters}) async {
     try {
       final response = await _supabaseService.invokeFunction(
         'api-members-list',
@@ -1360,19 +1389,22 @@ class LiveDataService {
       if (response.status < 200 || response.status >= 300) {
         return const <Map<String, dynamic>>[];
       }
-      final payload = (response.data as Map?)?.cast<String, dynamic>() ?? const {};
+      final payload =
+          (response.data as Map?)?.cast<String, dynamic>() ?? const {};
       final members = (payload['members'] as List?)
-          ?.whereType<Map>()
-          .map((e) => e.cast<String, dynamic>())
-          .where((m) => _toDouble(m['wallet_balance']) < 0)
-          .toList() ?? const <Map<String, dynamic>>[];
+              ?.whereType<Map>()
+              .map((e) => e.cast<String, dynamic>())
+              .where((m) => _toDouble(m['wallet_balance']) < 0)
+              .toList() ??
+          const <Map<String, dynamic>>[];
       return members;
     } catch (_) {
       return const <Map<String, dynamic>>[];
     }
   }
 
-  Future<List<Map<String, dynamic>>> fetchReportMembers({required String appToken, Map<String, dynamic>? filters}) async {
+  Future<List<Map<String, dynamic>>> fetchReportMembers(
+      {required String appToken, Map<String, dynamic>? filters}) async {
     try {
       final response = await _supabaseService.invokeFunction(
         'api-members-list',
@@ -1382,17 +1414,20 @@ class LiveDataService {
       if (response.status < 200 || response.status >= 300) {
         return const <Map<String, dynamic>>[];
       }
-      final payload = (response.data as Map?)?.cast<String, dynamic>() ?? const {};
+      final payload =
+          (response.data as Map?)?.cast<String, dynamic>() ?? const {};
       return (payload['members'] as List?)
-          ?.whereType<Map>()
-          .map((e) => e.cast<String, dynamic>())
-          .toList() ?? const <Map<String, dynamic>>[];
+              ?.whereType<Map>()
+              .map((e) => e.cast<String, dynamic>())
+              .toList() ??
+          const <Map<String, dynamic>>[];
     } catch (_) {
       return const <Map<String, dynamic>>[];
     }
   }
 
-  Future<List<Map<String, dynamic>>> fetchReportDiscipline({required String appToken, Map<String, dynamic>? filters}) async {
+  Future<List<Map<String, dynamic>>> fetchReportDiscipline(
+      {required String appToken, Map<String, dynamic>? filters}) async {
     final days = (filters?['days'] as int?) ?? 180;
     try {
       final response = await _supabaseService.invokeFunction(
@@ -1403,18 +1438,21 @@ class LiveDataService {
       if (response.status < 200 || response.status >= 300) {
         return const <Map<String, dynamic>>[];
       }
-      final payload = (response.data as Map?)?.cast<String, dynamic>() ?? const {};
+      final payload =
+          (response.data as Map?)?.cast<String, dynamic>() ?? const {};
       final transitions = (payload['transitions'] as List?)
-          ?.whereType<Map>()
-          .map((e) => e.cast<String, dynamic>())
-          .toList() ?? const <Map<String, dynamic>>[];
+              ?.whereType<Map>()
+              .map((e) => e.cast<String, dynamic>())
+              .toList() ??
+          const <Map<String, dynamic>>[];
       return transitions;
     } catch (_) {
       return const <Map<String, dynamic>>[];
     }
   }
 
-  Future<Map<String, dynamic>> fetchFiscalStats({required String appToken, Map<String, dynamic>? filters}) async {
+  Future<Map<String, dynamic>> fetchFiscalStats(
+      {required String appToken, Map<String, dynamic>? filters}) async {
     try {
       final response = await _supabaseService.invokeFunction(
         'api-reports-summary',
@@ -1423,14 +1461,16 @@ class LiveDataService {
       if (response.status < 200 || response.status >= 300) {
         return const {};
       }
-      final payload = (response.data as Map?)?.cast<String, dynamic>() ?? const {};
+      final payload =
+          (response.data as Map?)?.cast<String, dynamic>() ?? const {};
       return (payload['report'] as Map?)?.cast<String, dynamic>() ?? const {};
     } catch (_) {
       return const {};
     }
   }
 
-  Future<List<Map<String, dynamic>>> fetchFiscalContributions({required String appToken, Map<String, dynamic>? filters}) async {
+  Future<List<Map<String, dynamic>>> fetchFiscalContributions(
+      {required String appToken, Map<String, dynamic>? filters}) async {
     try {
       final response = await _supabaseService.invokeFunction(
         'api-reports-summary',
@@ -1439,18 +1479,22 @@ class LiveDataService {
       if (response.status < 200 || response.status >= 300) {
         return const <Map<String, dynamic>>[];
       }
-      final payload = (response.data as Map?)?.cast<String, dynamic>() ?? const {};
-      final report = (payload['report'] as Map?)?.cast<String, dynamic>() ?? const {};
+      final payload =
+          (response.data as Map?)?.cast<String, dynamic>() ?? const {};
+      final report =
+          (payload['report'] as Map?)?.cast<String, dynamic>() ?? const {};
       return (report['monthly_contributions'] as List?)
-          ?.whereType<Map>()
-          .map((e) => e.cast<String, dynamic>())
-          .toList() ?? const <Map<String, dynamic>>[];
+              ?.whereType<Map>()
+              .map((e) => e.cast<String, dynamic>())
+              .toList() ??
+          const <Map<String, dynamic>>[];
     } catch (_) {
       return const <Map<String, dynamic>>[];
     }
   }
 
-  Future<List<Map<String, dynamic>>> fetchCaseFundingSummary({required String appToken, Map<String, dynamic>? filters}) async {
+  Future<List<Map<String, dynamic>>> fetchCaseFundingSummary(
+      {required String appToken, Map<String, dynamic>? filters}) async {
     try {
       final response = await _supabaseService.invokeFunction(
         'api-cases-list',
@@ -1463,17 +1507,20 @@ class LiveDataService {
       if (response.status < 200 || response.status >= 300) {
         return const <Map<String, dynamic>>[];
       }
-      final payload = (response.data as Map?)?.cast<String, dynamic>() ?? const {};
+      final payload =
+          (response.data as Map?)?.cast<String, dynamic>() ?? const {};
       return (payload['cases'] as List?)
-          ?.whereType<Map>()
-          .map((e) => e.cast<String, dynamic>())
-          .toList() ?? const <Map<String, dynamic>>[];
+              ?.whereType<Map>()
+              .map((e) => e.cast<String, dynamic>())
+              .toList() ??
+          const <Map<String, dynamic>>[];
     } catch (_) {
       return const <Map<String, dynamic>>[];
     }
   }
 
-  Future<List<Map<String, dynamic>>> fetchMemberContributionsReport({required String appToken, Map<String, dynamic>? filters}) async {
+  Future<List<Map<String, dynamic>>> fetchMemberContributionsReport(
+      {required String appToken, Map<String, dynamic>? filters}) async {
     try {
       final response = await _supabaseService.invokeFunction(
         'api-members-list',
@@ -1483,18 +1530,21 @@ class LiveDataService {
       if (response.status < 200 || response.status >= 300) {
         return const <Map<String, dynamic>>[];
       }
-      final payload = (response.data as Map?)?.cast<String, dynamic>() ?? const {};
+      final payload =
+          (response.data as Map?)?.cast<String, dynamic>() ?? const {};
       final members = (payload['members'] as List?)
-          ?.whereType<Map>()
-          .map((e) => e.cast<String, dynamic>())
-          .toList() ?? const <Map<String, dynamic>>[];
+              ?.whereType<Map>()
+              .map((e) => e.cast<String, dynamic>())
+              .toList() ??
+          const <Map<String, dynamic>>[];
       return members;
     } catch (_) {
       return const <Map<String, dynamic>>[];
     }
   }
 
-  Future<List<Map<String, dynamic>>> fetchComplianceCasePayments({required String appToken, Map<String, dynamic>? filters}) async {
+  Future<List<Map<String, dynamic>>> fetchComplianceCasePayments(
+      {required String appToken, Map<String, dynamic>? filters}) async {
     try {
       final response = await _supabaseService.invokeFunction(
         'api-reports-summary',
@@ -1503,18 +1553,22 @@ class LiveDataService {
       if (response.status < 200 || response.status >= 300) {
         return const <Map<String, dynamic>>[];
       }
-      final payload = (response.data as Map?)?.cast<String, dynamic>() ?? const {};
-      final report = (payload['report'] as Map?)?.cast<String, dynamic>() ?? const {};
+      final payload =
+          (response.data as Map?)?.cast<String, dynamic>() ?? const {};
+      final report =
+          (payload['report'] as Map?)?.cast<String, dynamic>() ?? const {};
       return (report['case_payments_compliance'] as List?)
-          ?.whereType<Map>()
-          .map((e) => e.cast<String, dynamic>())
-          .toList() ?? const <Map<String, dynamic>>[];
+              ?.whereType<Map>()
+              .map((e) => e.cast<String, dynamic>())
+              .toList() ??
+          const <Map<String, dynamic>>[];
     } catch (_) {
       return const <Map<String, dynamic>>[];
     }
   }
 
-  Future<List<Map<String, dynamic>>> fetchAuditTrail({required String appToken, Map<String, dynamic>? filters}) async {
+  Future<List<Map<String, dynamic>>> fetchAuditTrail(
+      {required String appToken, Map<String, dynamic>? filters}) async {
     try {
       final response = await _supabaseService.invokeFunction(
         'api-reports-summary',
@@ -1523,18 +1577,22 @@ class LiveDataService {
       if (response.status < 200 || response.status >= 300) {
         return const <Map<String, dynamic>>[];
       }
-      final payload = (response.data as Map?)?.cast<String, dynamic>() ?? const {};
-      final report = (payload['report'] as Map?)?.cast<String, dynamic>() ?? const {};
+      final payload =
+          (response.data as Map?)?.cast<String, dynamic>() ?? const {};
+      final report =
+          (payload['report'] as Map?)?.cast<String, dynamic>() ?? const {};
       return (report['audit_entries'] as List?)
-          ?.whereType<Map>()
-          .map((e) => e.cast<String, dynamic>())
-          .toList() ?? const <Map<String, dynamic>>[];
+              ?.whereType<Map>()
+              .map((e) => e.cast<String, dynamic>())
+              .toList() ??
+          const <Map<String, dynamic>>[];
     } catch (_) {
       return const <Map<String, dynamic>>[];
     }
   }
 
-  Future<List<Map<String, dynamic>>> fetchReversalsAudit({required String appToken, Map<String, dynamic>? filters}) async {
+  Future<List<Map<String, dynamic>>> fetchReversalsAudit(
+      {required String appToken, Map<String, dynamic>? filters}) async {
     try {
       final response = await _supabaseService.invokeFunction(
         'api-reports-summary',
@@ -1543,18 +1601,22 @@ class LiveDataService {
       if (response.status < 200 || response.status >= 300) {
         return const <Map<String, dynamic>>[];
       }
-      final payload = (response.data as Map?)?.cast<String, dynamic>() ?? const {};
-      final report = (payload['report'] as Map?)?.cast<String, dynamic>() ?? const {};
+      final payload =
+          (response.data as Map?)?.cast<String, dynamic>() ?? const {};
+      final report =
+          (payload['report'] as Map?)?.cast<String, dynamic>() ?? const {};
       return (report['reversals'] as List?)
-          ?.whereType<Map>()
-          .map((e) => e.cast<String, dynamic>())
-          .toList() ?? const <Map<String, dynamic>>[];
+              ?.whereType<Map>()
+              .map((e) => e.cast<String, dynamic>())
+              .toList() ??
+          const <Map<String, dynamic>>[];
     } catch (_) {
       return const <Map<String, dynamic>>[];
     }
   }
 
-  Future<List<Map<String, dynamic>>> fetchComplianceIssues({required String appToken, Map<String, dynamic>? filters}) async {
+  Future<List<Map<String, dynamic>>> fetchComplianceIssues(
+      {required String appToken, Map<String, dynamic>? filters}) async {
     try {
       final response = await _supabaseService.invokeFunction(
         'api-reports-summary',
@@ -1563,12 +1625,15 @@ class LiveDataService {
       if (response.status < 200 || response.status >= 300) {
         return const <Map<String, dynamic>>[];
       }
-      final payload = (response.data as Map?)?.cast<String, dynamic>() ?? const {};
-      final report = (payload['report'] as Map?)?.cast<String, dynamic>() ?? const {};
+      final payload =
+          (response.data as Map?)?.cast<String, dynamic>() ?? const {};
+      final report =
+          (payload['report'] as Map?)?.cast<String, dynamic>() ?? const {};
       return (report['compliance_issues'] as List?)
-          ?.whereType<Map>()
-          .map((e) => e.cast<String, dynamic>())
-          .toList() ?? const <Map<String, dynamic>>[];
+              ?.whereType<Map>()
+              .map((e) => e.cast<String, dynamic>())
+              .toList() ??
+          const <Map<String, dynamic>>[];
     } catch (_) {
       return const <Map<String, dynamic>>[];
     }
@@ -1581,7 +1646,7 @@ class LiveDataService {
   }) async {
     await _client.from('transactions').update({
       'description': description,
-      }).eq('id', transactionId);
+    }).eq('id', transactionId);
   }
 
   Future<void> deleteCase({required String caseId}) async {
@@ -1603,13 +1668,16 @@ class LiveDataService {
     );
     if (response.status < 200 || response.status >= 300) {
       final payload = (response.data as Map?)?.cast<String, dynamic>();
-      throw Exception(payload?['error']?.toString() ?? 'Failed to import members');
+      throw Exception(
+          payload?['error']?.toString() ?? 'Failed to import members');
     }
-    final payload = (response.data as Map?)?.cast<String, dynamic>() ?? const {};
+    final payload =
+        (response.data as Map?)?.cast<String, dynamic>() ?? const {};
     return payload;
   }
 
-  Future<List<Map<String, dynamic>>> fetchSmsTemplates({required String appToken}) async {
+  Future<List<Map<String, dynamic>>> fetchSmsTemplates(
+      {required String appToken}) async {
     final response = await _supabaseService.invokeFunction(
       'api-sms-templates',
       headers: {'x-app-token': appToken},
@@ -1617,11 +1685,13 @@ class LiveDataService {
     if (response.status < 200 || response.status >= 300) {
       throw Exception('Failed to load SMS templates');
     }
-    final payload = (response.data as Map?)?.cast<String, dynamic>() ?? const {};
+    final payload =
+        (response.data as Map?)?.cast<String, dynamic>() ?? const {};
     return (payload['templates'] as List?)
-        ?.whereType<Map>()
-        .map((e) => e.cast<String, dynamic>())
-        .toList() ?? const <Map<String, dynamic>>[];
+            ?.whereType<Map>()
+            .map((e) => e.cast<String, dynamic>())
+            .toList() ??
+        const <Map<String, dynamic>>[];
   }
 
   Future<Map<String, dynamic>> updateSmsTemplate({
@@ -1636,9 +1706,11 @@ class LiveDataService {
     );
     if (response.status < 200 || response.status >= 300) {
       final payload = (response.data as Map?)?.cast<String, dynamic>();
-      throw Exception(payload?['error']?.toString() ?? 'Failed to update template');
+      throw Exception(
+          payload?['error']?.toString() ?? 'Failed to update template');
     }
-    final payload = (response.data as Map?)?.cast<String, dynamic>() ?? const {};
+    final payload =
+        (response.data as Map?)?.cast<String, dynamic>() ?? const {};
     return (payload['template'] as Map?)?.cast<String, dynamic>() ?? const {};
   }
 

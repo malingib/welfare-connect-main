@@ -390,7 +390,7 @@ const MemberDetails = () => {
       const calculatedBalance = (transactions || []).reduce((sum, tx: any) => {
         const amount = Number(tx.amount) || 0;
         const type = String(tx.transaction_type || '').toLowerCase();
-        const normalizedAmount = ['registration', 'renewal', 'penalty', 'contribution', 'arrears'].includes(type)
+        const normalizedAmount = ['registration', 'renewal', 'penalty', 'contribution', 'arrears', 'late_payment'].includes(type)
           ? -Math.abs(amount)
           : amount;
         return sum + normalizedAmount;

@@ -6,6 +6,7 @@ import * as z from "zod";
 
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { auditStamp } from "@/lib/appAuth";
 import type { Database } from "@/integrations/supabase/types";
 
 import {
@@ -127,6 +128,7 @@ const BulkRenewalFeeDialog = ({
       }
 
       const createdAt = new Date().toISOString();
+      const stamp = auditStamp();
       const rows: TransactionInsert[] = ids.map((id) => ({
         member_id: id,
         amount: transactionAmount,
@@ -134,6 +136,10 @@ const BulkRenewalFeeDialog = ({
         mpesa_reference: null,
         description: values.description,
         created_at: createdAt,
+        metadata: {
+          source: "bulk_renewal_dialog",
+          ...stamp,
+        },
       }));
 
       const batchSize = 500;

@@ -68,11 +68,25 @@ class _NotificationBellState extends ConsumerState<NotificationBell> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Padding(
-                  padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
-                  child: Text(
-                    'Notifications',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 8, 8),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Notifications',
+                        style: TextStyle(
+                            fontSize: 18, fontWeight: FontWeight.w700),
+                      ),
+                      if (_unreadCount > 0)
+                        TextButton(
+                          onPressed: () async {
+                            await _markAllRead();
+                            if (context.mounted) Navigator.pop(context);
+                          },
+                          child: const Text('Mark all read'),
+                        ),
+                    ],
                   ),
                 ),
                 const Divider(height: 1),
@@ -96,7 +110,8 @@ class _NotificationBellState extends ConsumerState<NotificationBell> {
                               dense: true,
                               title: Text(
                                 item['title']?.toString() ?? 'Notification',
-                                style: const TextStyle(fontWeight: FontWeight.w600),
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w600),
                               ),
                               subtitle: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -106,13 +121,18 @@ class _NotificationBellState extends ConsumerState<NotificationBell> {
                                   const SizedBox(height: 4),
                                   Text(
                                     createdAt?.toLocal().toString() ?? '',
-                                    style: const TextStyle(fontSize: 11, color: Colors.black45),
+                                    style: const TextStyle(
+                                        fontSize: 11, color: Colors.black45),
                                   ),
                                 ],
                               ),
                               trailing: item['is_read'] == true
                                   ? null
-                                  : const Icon(Icons.fiber_manual_record, size: 10, color: Colors.redAccent),
+                                  : const Icon(Icons.fiber_manual_record,
+                                      size: 10, color: Colors.redAccent),
+                              onTap: item['is_read'] == true
+                                  ? null
+                                  : () => _markRead(item['id']?.toString()),
                             );
                           },
                         ),
@@ -123,6 +143,52 @@ class _NotificationBellState extends ConsumerState<NotificationBell> {
         );
       },
     );
+  }
+
+  Future<void> _markRead(String? notificationId) async {
+    final token = ref.read(authControllerProvider).appToken;
+    if (token == null ||
+        token.isEmpty ||
+        notificationId == null ||
+        notificationId.isEmpty) {
+      return;
+    }
+    try {
+      await Supabase.instance.client.functions.invoke(
+        'api-notifications-mark-read',
+        body: {'notification_id': notificationId},
+        headers: {'x-app-token': token},
+      );
+      if (!mounted) return;
+      setState(() {
+        _items = _items.map((item) {
+          if (item['id']?.toString() != notificationId) return item;
+          return {...item, 'is_read': true};
+        }).toList();
+        if (_unreadCount > 0) _unreadCount--;
+      });
+    } catch (_) {
+      // Notification state is non-critical; keep the sheet usable on failure.
+    }
+  }
+
+  Future<void> _markAllRead() async {
+    final token = ref.read(authControllerProvider).appToken;
+    if (token == null || token.isEmpty || _unreadCount == 0) return;
+    try {
+      await Supabase.instance.client.functions.invoke(
+        'api-notifications-mark-read',
+        body: {'mark_all': true},
+        headers: {'x-app-token': token},
+      );
+      if (!mounted) return;
+      setState(() {
+        _items = _items.map((item) => {...item, 'is_read': true}).toList();
+        _unreadCount = 0;
+      });
+    } catch (_) {
+      // Notification state is non-critical; keep the sheet usable on failure.
+    }
   }
 
   @override
@@ -150,7 +216,10 @@ class _NotificationBellState extends ConsumerState<NotificationBell> {
               child: Text(
                 _unreadCount > 99 ? '99+' : '$_unreadCount',
                 textAlign: TextAlign.center,
-                style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w700),
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 9,
+                    fontWeight: FontWeight.w700),
               ),
             ),
           ),

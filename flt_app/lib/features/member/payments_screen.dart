@@ -123,6 +123,7 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen> {
               child: Column(
                 children: [
                   TextFormField(
+                    key: const ValueKey('payment_phone_field'),
                     controller: _phoneController,
                     keyboardType: TextInputType.phone,
                     decoration: const InputDecoration(
@@ -134,6 +135,7 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen> {
                   ),
                   const SizedBox(height: 10),
                   TextFormField(
+                    key: const ValueKey('payment_amount_field'),
                     controller: _amountController,
                     keyboardType: TextInputType.number,
                     decoration: const InputDecoration(
@@ -151,6 +153,7 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen> {
                   ),
                   const SizedBox(height: 10),
                   TextFormField(
+                    key: const ValueKey('payment_reference_field'),
                     controller: _referenceController,
                     decoration: const InputDecoration(
                         labelText: 'Account reference',
@@ -164,6 +167,7 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen> {
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
+                      key: const ValueKey('payment_submit_button'),
                       onPressed: _isLoading ? null : _handleSubmit,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFF1F3556),

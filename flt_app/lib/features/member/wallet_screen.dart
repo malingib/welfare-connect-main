@@ -249,6 +249,8 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
                             children: [
                               Text(
                                 type.replaceAll('_', ' '),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
                                 style: theme.textTheme.titleMedium?.copyWith(
                                   fontWeight: FontWeight.w600,
                                 ),
@@ -265,10 +267,17 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
                           ),
                         ),
                         const SizedBox(width: 8),
-                        Text(
-                          money.format(amount.abs()),
-                          style: theme.textTheme.titleSmall?.copyWith(
-                            fontWeight: FontWeight.w700,
+                        Flexible(
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            alignment: Alignment.centerRight,
+                            child: Text(
+                              money.format(amount.abs()),
+                              maxLines: 1,
+                              style: theme.textTheme.titleSmall?.copyWith(
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
                           ),
                         ),
                       ],
@@ -368,13 +377,14 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
                 onPressed: _busy
                     ? null
                     : () async {
-                        final toPay =
-                            pending.where((c) => selectedIds.contains(c.id)).toList();
+                        final toPay = pending
+                            .where((c) => selectedIds.contains(c.id))
+                            .toList();
                         if (toPay.isEmpty) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
-                              content:
-                                  Text('Choose one or more cases to pay first.'),
+                              content: Text(
+                                  'Choose one or more cases to pay first.'),
                               backgroundColor: Colors.red,
                             ),
                           );
@@ -391,7 +401,8 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
                           if (!mounted) return;
                           Navigator.of(context).pop();
                           final count = (result['count'] as num?)?.toInt() ?? 0;
-                          final total = (result['total'] as num?)?.toDouble() ?? 0;
+                          final total =
+                              (result['total'] as num?)?.toDouble() ?? 0;
                           Posthog().capture(
                             eventName: 'case_payment_completed',
                             properties: {
@@ -494,7 +505,8 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
                       (auth.memberId ?? '').isEmpty) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(
-                        content: Text('Choose a member and enter a valid amount.'),
+                        content:
+                            Text('Choose a member and enter a valid amount.'),
                         backgroundColor: Colors.red,
                       ),
                     );

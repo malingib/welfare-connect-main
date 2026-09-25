@@ -1,20 +1,23 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
-import { corsHeaders } from "../_shared/cors.ts";
+import { buildCorsHeaders } from "../_shared/cors.ts";
 import { requirePrivilegedRole, verifyAppJwtFromRequest } from "../_shared/app_jwt.ts";
 import { fetchSmsBalance } from "../_shared/sms.ts";
 
-function jsonResponse(status: number, payload: Record<string, unknown>) {
+function jsonResponse(status: number, payload: Record<string, unknown>, origin?: string | null) {
   return new Response(JSON.stringify(payload), {
     status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
+    headers: { ...buildCorsHeaders(origin), "Content-Type": "application/json" },
   });
 }
 
 serve(async (req) => {
+  const origin = req.headers.get("Origin");
+  const corsHeaders = buildCorsHeaders(origin);
+
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
-  if (req.method !== "POST") return jsonResponse(405, { error: "Method not allowed" });
+  if (req.method !== "POST") return jsonResponse(405, { error: "Method not allowed" }, origin);
 
   try {
     const claims = await verifyAppJwtFromRequest(req);
@@ -55,10 +58,11 @@ serve(async (req) => {
       total: totalCount.count || 0,
       page,
       page_size: pageSize,
-    });
+    }, origin);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    const status = message === "Forbidden" ? 403 : 500;
-    return jsonResponse(status, { error: message });
+    const lowered = message.toLowerCase();
+    const status = message === "Forbidden" ? 403 : lowered.includes("jwt") || lowered.includes("jws") || lowered.includes("token") ? 401 : 500;
+    return jsonResponse(status, { error: message }, origin);
   }
 });

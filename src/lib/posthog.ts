@@ -2,6 +2,9 @@ import { getCurrentUser, getCurrentMember } from './authorization';
 
 declare global {
   interface Window {
+    __APP_ANALYTICS__?: {
+      posthogEnabled?: boolean;
+    };
     posthog?: {
       capture: (eventName: string, properties?: Record<string, any>) => void;
       identify: (distinctId: string, properties?: Record<string, any>) => void;
@@ -11,8 +14,15 @@ declare global {
   }
 }
 
+const isAnalyticsEnabled = () => {
+  if (typeof window === 'undefined') return false;
+  if (window.__APP_ANALYTICS__?.posthogEnabled === false) return false;
+  return Boolean(window.posthog?.capture || window.posthog?.identify);
+};
+
 const getPosthog = () => {
   if (typeof window === 'undefined') return undefined;
+  if (!isAnalyticsEnabled()) return undefined;
   return window.posthog;
 };
 

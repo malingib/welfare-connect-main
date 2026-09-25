@@ -6,6 +6,7 @@ import RegistrationAccount from '@/components/accounts/RegistrationAccount';
 import RenewalAccount from '@/components/accounts/RenewalAccount';
 import PenaltyAccount from '@/components/accounts/PenaltyAccount';
 import ArrearsAccount from '@/components/accounts/ArrearsAccount';
+import LatePaymentsAccount from '@/components/accounts/LatePaymentsAccount';
 import { SuspenseManagement } from '@/components/accounts/SuspenseManagement';
 
 const Accounts = () => {
@@ -20,7 +21,7 @@ const Accounts = () => {
         </div>
 
         <Tabs defaultValue="registration" value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-          <TabsList className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-1 sm:gap-2 w-full h-auto">
+          <TabsList className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-1 sm:gap-2 w-full h-auto">
             <TabsTrigger value="registration" className="text-[10px] sm:text-xs md:text-sm h-8 sm:h-9 px-1 sm:px-2">
               <span className="hidden sm:inline">Registration Fees</span>
               <span className="sm:hidden">Registration</span>
@@ -36,6 +37,10 @@ const Accounts = () => {
             <TabsTrigger value="arrears" className="text-[10px] sm:text-xs md:text-sm h-8 sm:h-9 px-1 sm:px-2">
               <span className="hidden sm:inline">Arrears Account</span>
               <span className="sm:hidden">Arrears</span>
+            </TabsTrigger>
+            <TabsTrigger value="late" className="text-[10px] sm:text-xs md:text-sm h-8 sm:h-9 px-1 sm:px-2">
+              <span className="hidden sm:inline">Late Payments</span>
+              <span className="sm:hidden">Late</span>
             </TabsTrigger>
             <TabsTrigger value="suspense" className="text-[10px] sm:text-xs md:text-sm h-8 sm:h-9 px-1 sm:px-2">
               <span className="hidden sm:inline">Suspense Account</span>
@@ -57,6 +62,10 @@ const Accounts = () => {
 
           <TabsContent value="arrears" className="space-y-4 md:space-y-6">
             <ArrearsAccount />
+          </TabsContent>
+
+          <TabsContent value="late" className="space-y-4 md:space-y-6">
+            <LatePaymentsAccount />
           </TabsContent>
 
           <TabsContent value="suspense" className="space-y-4 md:space-y-6">

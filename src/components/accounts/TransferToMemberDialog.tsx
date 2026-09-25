@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { supabase } from '@/integrations/supabase/client';
+import { auditStamp } from '@/lib/appAuth';
 import type { Database } from '@/integrations/supabase/types';
 import { toast } from 'sonner';
 
@@ -109,6 +110,10 @@ export function TransferToMemberDialog({ open, onOpenChange, transaction, onSucc
         mpesa_reference: transaction.mpesaReference || null,
         created_at: new Date().toISOString(),
         case_id: null,
+        metadata: {
+          source: 'suspense_transfer',
+          ...auditStamp(),
+        },
       };
 
       // Create a new transaction record

@@ -2,14 +2,14 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import bcryptjs from "https://esm.sh/bcryptjs@2.4.3";
 import { SignJWT } from "https://esm.sh/jose@5.9.6";
-import { corsHeaders } from "../_shared/cors.ts";
+import { buildCorsHeaders } from "../_shared/cors.ts";
 
 const ADMIN_ROLES = new Set(["super_admin", "chairperson", "treasurer", "secretary"]);
 
-function jsonResponse(status: number, payload: Record<string, unknown>) {
+function jsonResponse(status: number, payload: Record<string, unknown>, origin?: string | null) {
   return new Response(JSON.stringify(payload), {
     status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
+    headers: { ...buildCorsHeaders(origin), "Content-Type": "application/json" },
   });
 }
 
@@ -18,12 +18,13 @@ function normalizeRole(role: unknown): string {
 }
 
 serve(async (req) => {
+  const origin = req.headers.get("Origin");
   if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
+    return new Response("ok", { headers: buildCorsHeaders(origin) });
   }
 
   if (req.method !== "POST") {
-    return jsonResponse(405, { error: "Method not allowed" });
+    return jsonResponse(405, { error: "Method not allowed" }, origin);
   }
 
   try {
@@ -34,12 +35,12 @@ serve(async (req) => {
 
     const appJwtSecret = Deno.env.get("APP_JWT_SECRET");
     if (!appJwtSecret) {
-      return jsonResponse(500, { error: "Server auth secret not configured" });
+      return jsonResponse(500, { error: "Server auth secret not configured" }, origin);
     }
 
     const { username, password } = await req.json();
     if (!username || !password) {
-      return jsonResponse(400, { error: "Username and password are required" });
+      return jsonResponse(400, { error: "Username and password are required" }, origin);
     }
 
     const { data: user, error: userError } = await supabase
@@ -49,16 +50,16 @@ serve(async (req) => {
       .maybeSingle();
 
     if (userError || !user) {
-      return jsonResponse(401, { error: "Invalid credentials" });
+      return jsonResponse(401, { error: "Invalid credentials" }, origin);
     }
 
     if (!user.is_active) {
-      return jsonResponse(403, { error: "Account is inactive" });
+      return jsonResponse(403, { error: "Account is inactive" }, origin);
     }
 
     const role = normalizeRole(user.role);
     if (!ADMIN_ROLES.has(role)) {
-      return jsonResponse(403, { error: "This account is not allowed in admin login" });
+      return jsonResponse(403, { error: "This account is not allowed in admin login" }, origin);
     }
 
     const storedPassword = String(user.password || "");
@@ -70,11 +71,12 @@ serve(async (req) => {
         action: "LOGIN_BLOCKED_UNHASHED_PASSWORD",
         table_name: "users",
         record_id: user.id,
+        user_id: user.id,
         status: "failed",
       }).throwOnError();
       return jsonResponse(403, {
         error: "Password reset required. Contact an administrator.",
-      });
+      }, origin);
     }
     const passwordValid = await bcryptjs.compare(String(password), storedPassword);
 
@@ -83,15 +85,18 @@ serve(async (req) => {
         action: "LOGIN_FAILED",
         table_name: "users",
         record_id: user.id,
+        user_id: user.id,
         status: "failed",
       }).throwOnError();
 
-      return jsonResponse(401, { error: "Invalid credentials" });
+      return jsonResponse(401, { error: "Invalid credentials" }, origin);
     }
 
+    const sessionId = crypto.randomUUID();
     const token = await new SignJWT({
       role,
       member_id: user.member_id ?? null,
+      sid: sessionId,
     })
       .setProtectedHeader({ alg: "HS256", typ: "JWT" })
       .setSubject(user.id)
@@ -103,7 +108,9 @@ serve(async (req) => {
       action: "LOGIN",
       table_name: "users",
       record_id: user.id,
+      user_id: user.id,
       status: "success",
+      metadata: { session_id: sessionId },
     }).throwOnError();
 
     return jsonResponse(200, {
@@ -117,9 +124,9 @@ serve(async (req) => {
         member_id: user.member_id,
         is_active: user.is_active,
       },
-    });
+    }, origin);
   } catch (error) {
     console.error("auth-admin-login error:", error);
-    return jsonResponse(500, { error: "Internal server error" });
+    return jsonResponse(500, { error: "Internal server error" }, origin);
   }
 });

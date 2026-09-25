@@ -1,19 +1,22 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-import { corsHeaders } from "../_shared/cors.ts";
+import { buildCorsHeaders } from "../_shared/cors.ts";
 import { requireMemberManagementRole, verifyAppJwtFromRequest } from "../_shared/app_jwt.ts";
 
-function jsonResponse(status: number, payload: Record<string, unknown>) {
+function jsonResponse(status: number, payload: Record<string, unknown>, origin?: string | null) {
   return new Response(JSON.stringify(payload), {
     status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
+    headers: { ...buildCorsHeaders(origin), "Content-Type": "application/json" },
   });
 }
 
 serve(async (req) => {
+  const origin = req.headers.get("Origin");
+  const corsHeaders = buildCorsHeaders(origin);
+
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
-  if (!["GET", "POST"].includes(req.method)) return jsonResponse(405, { error: "Method not allowed" });
+  if (!["GET", "POST"].includes(req.method)) return jsonResponse(405, { error: "Method not allowed" }, origin);
 
   try {
     const claims = await verifyAppJwtFromRequest(req);
@@ -68,9 +71,9 @@ serve(async (req) => {
       limit,
       offset,
       has_more: hasMore,
-    });
+    }, origin);
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Unauthorized";
-    return jsonResponse(msg === "Forbidden" ? 403 : 401, { error: msg });
+    return jsonResponse(msg === "Forbidden" ? 403 : 401, { error: msg }, origin);
   }
 });

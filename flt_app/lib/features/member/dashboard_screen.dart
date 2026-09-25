@@ -86,7 +86,8 @@ class _MemberDashboardScreenState extends ConsumerState<MemberDashboardScreen> {
                       children: [
                         _action(context, 'Wallet', '/member/wallet'),
                         _action(context, 'Cases', '/member/cases'),
-                        _action(context, 'Transactions', '/member/transactions'),
+                        _action(
+                            context, 'Transactions', '/member/transactions'),
                         _action(context, 'Payments', '/member/payments'),
                         _action(context, 'Dependants', '/member/dependants'),
                         _action(context, 'Report', '/member/report'),
@@ -104,25 +105,40 @@ class _MemberDashboardScreenState extends ConsumerState<MemberDashboardScreen> {
                       children: [
                         const Text(
                           'Recent Activity',
-                          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+                          style: TextStyle(
+                              fontWeight: FontWeight.w700, fontSize: 16),
                         ),
                         const SizedBox(height: 8),
                         if (data.recentTransactions.isEmpty)
                           const Text('No transactions found.')
                         else
                           ...data.recentTransactions.take(5).map((tx) {
-                            final date = DateTime.tryParse('${tx['created_at']}');
+                            final date =
+                                DateTime.tryParse('${tx['created_at']}');
                             return ListTile(
                               dense: true,
                               contentPadding: EdgeInsets.zero,
-                              title: Text('${tx['description'] ?? tx['transaction_type'] ?? '-'}'),
+                              title: Text(
+                                '${tx['description'] ?? tx['transaction_type'] ?? '-'}',
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
                               subtitle: Text(date == null
                                   ? '${tx['transaction_type'] ?? '-'}'
                                   : DateFormat('MMM d, yyyy • h:mm a')
                                       .format(date.toLocal())),
-                              trailing: Text(
-                                money.format(_toDouble(tx['amount']).abs()),
-                                style: const TextStyle(fontWeight: FontWeight.w700),
+                              trailing: ConstrainedBox(
+                                constraints:
+                                    const BoxConstraints(maxWidth: 112),
+                                child: FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  alignment: Alignment.centerRight,
+                                  child: Text(
+                                    money.format(_toDouble(tx['amount']).abs()),
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.w700),
+                                  ),
+                                ),
                               ),
                             );
                           }),
@@ -149,7 +165,9 @@ class _MemberDashboardScreenState extends ConsumerState<MemberDashboardScreen> {
             children: [
               Text(label, style: const TextStyle(color: Colors.black54)),
               const SizedBox(height: 6),
-              Text(value, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+              Text(value,
+                  style: const TextStyle(
+                      fontWeight: FontWeight.bold, fontSize: 18)),
             ],
           ),
         ),
@@ -170,4 +188,3 @@ class _MemberDashboardScreenState extends ConsumerState<MemberDashboardScreen> {
     return double.tryParse(value.toString()) ?? 0;
   }
 }
-

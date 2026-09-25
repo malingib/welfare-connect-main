@@ -39,6 +39,27 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     }
   }
 
+  Future<void> _showRecoveryHelp() async {
+    final isMember = _isMemberPortal;
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(isMember ? 'Forgot member ID?' : 'Forgot password?'),
+        content: Text(
+          isMember
+              ? 'Please contact the welfare administrator to confirm your member number and registered phone number.'
+              : 'Please contact a super administrator to reset your admin password. Admin resets are recorded for security.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authControllerProvider);
@@ -176,7 +197,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               controller: _identifierController,
               focusNode: _identifierFocusNode,
               label: _isMemberPortal ? 'Member Number' : 'Admin Username',
-              hint: _isMemberPortal ? 'Enter your member ID' : 'Enter admin username',
+              hint: _isMemberPortal
+                  ? 'Enter your member ID'
+                  : 'Enter admin username',
               icon: _isMemberPortal ? Icons.badge : Icons.admin_panel_settings,
               textInputAction: TextInputAction.next,
               onFieldSubmitted: (_) => _secretFocusNode.requestFocus(),
@@ -201,8 +224,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               label: _isMemberPortal ? 'Phone Number' : 'Password',
               hint: _isMemberPortal ? '+2547XXXXXXXX' : 'Enter admin password',
               icon: _isMemberPortal ? Icons.phone : Icons.lock_outline,
-              keyboardType:
-                  _isMemberPortal ? TextInputType.phone : TextInputType.visiblePassword,
+              keyboardType: _isMemberPortal
+                  ? TextInputType.phone
+                  : TextInputType.visiblePassword,
               textInputAction: TextInputAction.done,
               obscureText: !_isMemberPortal,
               onFieldSubmitted: (_) => _handleLogin(),
@@ -248,7 +272,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     ],
                   ),
                   TextButton(
-                    onPressed: () {},
+                    onPressed: _showRecoveryHelp,
                     child: Text(
                       _isMemberPortal ? 'Forgot ID?' : 'Forgot Password?',
                       style: theme.textTheme.labelLarge?.copyWith(
@@ -354,9 +378,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               child: Container(
                 padding: const EdgeInsets.symmetric(vertical: 12),
                 decoration: BoxDecoration(
-                  color: _isMemberPortal
-                      ? Colors.white
-                      : Colors.transparent,
+                  color: _isMemberPortal ? Colors.white : Colors.transparent,
                   borderRadius: BorderRadius.circular(14),
                   boxShadow: _isMemberPortal
                       ? [
@@ -375,7 +397,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     color: _isMemberPortal
                         ? AppColors.onSurface
                         : AppColors.onSurfaceVariant,
-                    fontWeight: _isMemberPortal ? FontWeight.w600 : FontWeight.w500,
+                    fontWeight:
+                        _isMemberPortal ? FontWeight.w600 : FontWeight.w500,
                   ),
                 ),
               ),
@@ -388,9 +411,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               child: Container(
                 padding: const EdgeInsets.symmetric(vertical: 12),
                 decoration: BoxDecoration(
-                  color: !_isMemberPortal
-                      ? Colors.white
-                      : Colors.transparent,
+                  color: !_isMemberPortal ? Colors.white : Colors.transparent,
                   borderRadius: BorderRadius.circular(14),
                 ),
                 child: Text(

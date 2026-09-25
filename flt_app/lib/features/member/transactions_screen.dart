@@ -109,14 +109,27 @@ class _MemberTransactionsScreenState
           return ListView(
             padding: const EdgeInsets.all(AppConstants.marginEdge),
             children: [
-              Row(
-                children: [
-                  Expanded(child: _stat('Total', '${items.length}')),
-                  const SizedBox(width: 8),
-                  Expanded(child: _stat('Credits', money.format(totalCredit))),
-                  const SizedBox(width: 8),
-                  Expanded(child: _stat('Debits', money.format(totalDebit))),
-                ],
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final columns = constraints.maxWidth >= 640
+                      ? 3
+                      : constraints.maxWidth >= 360
+                          ? 2
+                          : 1;
+                  final width =
+                      (constraints.maxWidth - ((columns - 1) * 8)) / columns;
+                  return Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      _stat('Total', '${items.length}'),
+                      _stat('Credits', money.format(totalCredit)),
+                      _stat('Debits', money.format(totalDebit)),
+                    ]
+                        .map((child) => SizedBox(width: width, child: child))
+                        .toList(),
+                  );
+                },
               ),
               const SizedBox(height: 10),
               TextField(
@@ -146,14 +159,23 @@ class _MemberTransactionsScreenState
                     child: DropdownButtonFormField<String>(
                       initialValue: _typeFilter,
                       items: const [
-                        DropdownMenuItem(value: 'all', child: Text('All types')),
-                        DropdownMenuItem(value: 'wallet_funding', child: Text('Wallet funding')),
-                        DropdownMenuItem(value: 'contribution', child: Text('Contribution')),
-                        DropdownMenuItem(value: 'case_wallet_deduction', child: Text('Case deduction')),
-                        DropdownMenuItem(value: 'arrears', child: Text('Arrears')),
-                        DropdownMenuItem(value: 'penalty', child: Text('Penalty')),
+                        DropdownMenuItem(
+                            value: 'all', child: Text('All types')),
+                        DropdownMenuItem(
+                            value: 'wallet_funding',
+                            child: Text('Wallet funding')),
+                        DropdownMenuItem(
+                            value: 'contribution', child: Text('Contribution')),
+                        DropdownMenuItem(
+                            value: 'case_wallet_deduction',
+                            child: Text('Case deduction')),
+                        DropdownMenuItem(
+                            value: 'arrears', child: Text('Arrears')),
+                        DropdownMenuItem(
+                            value: 'penalty', child: Text('Penalty')),
                       ],
-                      onChanged: (v) => setState(() => _typeFilter = v ?? 'all'),
+                      onChanged: (v) =>
+                          setState(() => _typeFilter = v ?? 'all'),
                       decoration: const InputDecoration(
                         labelText: 'Type',
                         border: OutlineInputBorder(),
@@ -165,13 +187,19 @@ class _MemberTransactionsScreenState
                     child: DropdownButtonFormField<String>(
                       initialValue: _statusFilter,
                       items: const [
-                        DropdownMenuItem(value: 'all', child: Text('All statuses')),
-                        DropdownMenuItem(value: 'completed', child: Text('Completed')),
-                        DropdownMenuItem(value: 'pending', child: Text('Pending')),
-                        DropdownMenuItem(value: 'reversed', child: Text('Reversed')),
-                        DropdownMenuItem(value: 'failed', child: Text('Failed')),
+                        DropdownMenuItem(
+                            value: 'all', child: Text('All statuses')),
+                        DropdownMenuItem(
+                            value: 'completed', child: Text('Completed')),
+                        DropdownMenuItem(
+                            value: 'pending', child: Text('Pending')),
+                        DropdownMenuItem(
+                            value: 'reversed', child: Text('Reversed')),
+                        DropdownMenuItem(
+                            value: 'failed', child: Text('Failed')),
                       ],
-                      onChanged: (v) => setState(() => _statusFilter = v ?? 'all'),
+                      onChanged: (v) =>
+                          setState(() => _statusFilter = v ?? 'all'),
                       decoration: const InputDecoration(
                         labelText: 'Status',
                         border: OutlineInputBorder(),
@@ -182,7 +210,8 @@ class _MemberTransactionsScreenState
               ),
               const SizedBox(height: 10),
               if (filtered.isEmpty)
-                const Center(child: Padding(
+                const Center(
+                    child: Padding(
                   padding: EdgeInsets.all(20),
                   child: Text('No transactions match current filters.'),
                 ))
@@ -198,8 +227,8 @@ class _MemberTransactionsScreenState
 
                   return Container(
                     margin: const EdgeInsets.only(bottom: 8),
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 12),
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(10),
@@ -212,49 +241,65 @@ class _MemberTransactionsScreenState
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(description.isEmpty ? type.replaceAll('_', ' ') : description,
+                              Text(
+                                  description.isEmpty
+                                      ? type.replaceAll('_', ' ')
+                                      : description,
                                   maxLines: 2,
                                   overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(fontWeight: FontWeight.w600)),
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.w600)),
                               const SizedBox(height: 4),
                               Text(
                                 createdAt == null
                                     ? '-'
                                     : DateFormat('MMM d, yyyy • h:mm a')
                                         .format(createdAt.toLocal()),
-                                style: const TextStyle(color: Color(0xFF5E6B7A), fontSize: 12),
+                                style: const TextStyle(
+                                    color: Color(0xFF5E6B7A), fontSize: 12),
                               ),
                             ],
                           ),
                         ),
                         const SizedBox(width: 8),
-                        Expanded(
+                        Flexible(
                           flex: 2,
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              Text(
-                                '${isCredit ? '+' : '-'}${money.format(absAmount)}',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w700,
-                                  color: isCredit
-                                      ? const Color(0xFF0A7C2F)
-                                      : const Color(0xFFB34700),
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 150),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  alignment: Alignment.centerRight,
+                                  child: Text(
+                                    '${isCredit ? '+' : '-'}${money.format(absAmount)}',
+                                    maxLines: 1,
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                      color: isCredit
+                                          ? const Color(0xFF0A7C2F)
+                                          : const Color(0xFFB34700),
+                                    ),
+                                  ),
                                 ),
-                              ),
-                              const SizedBox(height: 4),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: _statusColor(status),
-                                  borderRadius: BorderRadius.circular(999),
+                                const SizedBox(height: 4),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: _statusColor(status),
+                                    borderRadius: BorderRadius.circular(999),
+                                  ),
+                                  child: Text(
+                                    status.toUpperCase(),
+                                    style: const TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w700),
+                                  ),
                                 ),
-                                child: Text(
-                                  status.toUpperCase(),
-                                  style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700),
-                                ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
                         ),
                       ],

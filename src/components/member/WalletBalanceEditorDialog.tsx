@@ -2,6 +2,7 @@ import * as React from "react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { auditStamp } from "@/lib/appAuth";
 
 import {
   Dialog,
@@ -54,8 +55,8 @@ const WalletBalanceEditorDialog = ({
 
       // Choose transaction type to align with existing accounting rules:
       // - Positive diff: wallet_funding (adds to balance)
-      // - Negative diff: arrears (stored as negative by DB calc)
-      const txType = isIncrease ? "wallet_funding" : "arrears";
+      // - Negative diff: wallet_manual_adjustment (wallet debit NOT counted as arrears/case payment)
+      const txType = isIncrease ? "wallet_funding" : "wallet_manual_adjustment";
       const txAmount = isIncrease ? difference : Math.abs(difference);
 
       // Insert adjustment transaction; DB trigger will recalc wallet_balance
@@ -72,6 +73,7 @@ const WalletBalanceEditorDialog = ({
           previous_balance: currentBalance,
           new_balance: numericBalance,
           reason: reason || null,
+          ...auditStamp(),
         },
       }) as any);
 

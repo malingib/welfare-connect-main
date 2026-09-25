@@ -73,7 +73,7 @@ serve(async (req) => {
       supabase
         .from('transactions')
         .select('id, member_id, case_id, amount, transaction_type, status, description, created_at, metadata')
-        .eq('transaction_type', 'arrears')
+        .in('transaction_type', ['arrears', 'late_payment'])
         .gte('created_at', fromDate)
         .in('status', ['completed', 'success'])
         .order('created_at', { ascending: false })
@@ -90,6 +90,20 @@ serve(async (req) => {
     if (latePaymentErr) throw latePaymentErr;
     if (latePaymentAggregateErr) throw latePaymentAggregateErr;
 
+    const caseIds = Array.from(new Set(
+      (latePaymentRows || []).map((row: any) => row.case_id).filter(Boolean),
+    ));
+    const caseLookup = new Map<string, string>();
+    if (caseIds.length > 0) {
+      const { data: caseRows, error: casesErr } = await supabase
+        .from('cases')
+        .select('id, case_number')
+        .in('id', caseIds);
+      if (casesErr) throw casesErr;
+      for (const c of caseRows || []) {
+        caseLookup.set(c.id, c.case_number);
+      }
+    }
     const memberIds = Array.from(new Set([
       ...(transitions || []).map((row: any) => row.member_id).filter(Boolean),
       ...(reinstatements || []).map((row: any) => row.member_id).filter(Boolean),
@@ -154,7 +168,7 @@ serve(async (req) => {
       member_number: memberLookup.get(row.member_id)?.member_number || null,
       member_name: memberLookup.get(row.member_id)?.name || null,
       member_status: memberLookup.get(row.member_id)?.status || null,
-      case_number: String(row?.metadata?.paid_case_number || ''),
+      case_number: caseLookup.get(String(row.case_id || '')) || String(row?.metadata?.paid_case_number || ''),
     }));
 
     const sampledTotal = late_payments.reduce((sum: number, row: any) => sum + Math.abs(toNum(row.amount)), 0);

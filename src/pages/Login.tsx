@@ -82,9 +82,10 @@ const Login = () => {
         }
       }
 
-      // Check Supabase session first
+      // A Supabase session is only an admin-session signal. Member access uses
+      // the app token returned by auth-member-login and its member id.
       const { data } = await supabase.auth.getSession();
-      if (data.session) {
+      if (loginMode === 'admin' && data.session) {
         navigate('/dashboard', { replace: true });
         return;
       }
@@ -219,10 +220,11 @@ const Login = () => {
       navigate('/member/dashboard', { replace: true });
     } catch (error) {
       console.error('Member login error:', error);
+      const message = error instanceof Error ? error.message : 'Invalid credentials. Please try again.';
       toast({
         variant: 'destructive',
-        title: 'Error',
-        description: 'An unexpected error occurred. Please try again.',
+        title: 'Member login failed',
+        description: message,
       });
     } finally {
       setMemberLoading(false);

@@ -9,7 +9,8 @@ class AdminSettingsScreen extends ConsumerStatefulWidget {
   const AdminSettingsScreen({super.key});
 
   @override
-  ConsumerState<AdminSettingsScreen> createState() => _AdminSettingsScreenState();
+  ConsumerState<AdminSettingsScreen> createState() =>
+      _AdminSettingsScreenState();
 }
 
 class _AdminSettingsScreenState extends ConsumerState<AdminSettingsScreen> {
@@ -24,7 +25,15 @@ class _AdminSettingsScreenState extends ConsumerState<AdminSettingsScreen> {
   final _memberIdStart = TextEditingController();
   final _caseIdStart = TextEditingController();
   final _residenceCtrl = TextEditingController();
+  final _mpesaShortcode = TextEditingController();
+  final _mpesaConsumerKey = TextEditingController();
+  final _mpesaConsumerSecret = TextEditingController();
+  final _mpesaPasskey = TextEditingController();
+  final _mpesaInitiatorName = TextEditingController();
+  final _mpesaInitiatorPassword = TextEditingController();
+  String _mpesaEnv = 'sandbox';
   bool _loading = true;
+  bool _saving = false;
   int _currentTab = 0;
 
   @override
@@ -51,10 +60,107 @@ class _AdminSettingsScreenState extends ConsumerState<AdminSettingsScreen> {
         _penaltyAmount.text = (s['penalty_amount'] ?? '').toString();
         _memberIdStart.text = (s['member_id_start'] ?? '1').toString();
         _caseIdStart.text = (s['case_id_start'] ?? '1').toString();
+        _mpesaShortcode.text = (s['mpesa_shortcode'] ?? '').toString();
+        _mpesaInitiatorName.text = (s['mpesa_initiator_name'] ?? '').toString();
+        _mpesaEnv = (s['mpesa_env'] ?? 'sandbox').toString() == 'production'
+            ? 'production'
+            : 'sandbox';
       }
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  Future<void> _save() async {
+    final token = ref.read(authControllerProvider).appToken;
+    if (token == null || token.isEmpty || _saving) return;
+
+    final registrationFee = double.tryParse(_registrationFee.text.trim());
+    final renewalFee = double.tryParse(_renewalFee.text.trim());
+    final penalty = double.tryParse(_penaltyAmount.text.trim());
+    final memberStart = int.tryParse(_memberIdStart.text.trim());
+    final caseStart = int.tryParse(_caseIdStart.text.trim());
+    if (registrationFee == null ||
+        renewalFee == null ||
+        penalty == null ||
+        memberStart == null ||
+        memberStart < 1 ||
+        caseStart == null ||
+        caseStart < 1) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('Enter valid fees and positive ID starts.')),
+      );
+      return;
+    }
+
+    setState(() => _saving = true);
+    try {
+      final settings = <String, dynamic>{
+        'organization_name': _orgName.text.trim(),
+        'organization_phone': _orgPhone.text.trim(),
+        'organization_email': _orgEmail.text.trim(),
+        'paybill_number': _paybill.text.trim(),
+        'registration_fee': registrationFee,
+        'renewal_fee': renewalFee,
+        'penalty_amount': penalty,
+        'member_id_start': memberStart,
+        'case_id_start': caseStart,
+        'mpesa_shortcode': _mpesaShortcode.text.trim(),
+        'mpesa_initiator_name': _mpesaInitiatorName.text.trim(),
+        'mpesa_env': _mpesaEnv,
+      };
+      final sensitive = <String, TextEditingController>{
+        'mpesa_consumer_key': _mpesaConsumerKey,
+        'mpesa_consumer_secret': _mpesaConsumerSecret,
+        'mpesa_passkey': _mpesaPasskey,
+        'mpesa_initiator_password': _mpesaInitiatorPassword,
+      };
+      for (final entry in sensitive.entries) {
+        final value = entry.value.text.trim();
+        if (value.isNotEmpty) settings[entry.key] = value;
+      }
+      await _service.updateSettings(appToken: token, settings: settings);
+      if (!mounted) return;
+      for (final controller in sensitive.values) {
+        controller.clear();
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Settings saved successfully.')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to save settings: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  void dispose() {
+    for (final controller in [
+      _orgName,
+      _orgPhone,
+      _orgEmail,
+      _paybill,
+      _registrationFee,
+      _renewalFee,
+      _penaltyAmount,
+      _memberIdStart,
+      _caseIdStart,
+      _residenceCtrl,
+      _mpesaShortcode,
+      _mpesaConsumerKey,
+      _mpesaConsumerSecret,
+      _mpesaPasskey,
+      _mpesaInitiatorName,
+      _mpesaInitiatorPassword,
+    ]) {
+      controller.dispose();
+    }
+    super.dispose();
   }
 
   @override
@@ -62,14 +168,28 @@ class _AdminSettingsScreenState extends ConsumerState<AdminSettingsScreen> {
     return AdminShell(
       title: 'Settings',
       route: '/admin/settings',
+      actions: [
+        IconButton(
+          onPressed: _saving ? null : _save,
+          tooltip: 'Save settings',
+          icon: _saving
+              ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.save_outlined),
+        ),
+      ],
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : Column(
               children: [
-SingleChildScrollView(
-                   scrollDirection: Axis.horizontal,
-                   padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12),
-                   child: Row(
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 16.0, vertical: 12),
+                  child: Row(
                     children: List.generate(_tabs.length, (i) {
                       final selected = i == _currentTab;
                       return Padding(
@@ -80,7 +200,9 @@ SingleChildScrollView(
                           label: Text(_tabs[i]),
                           selectedColor: const Color(0xFF1F3556),
                           labelStyle: TextStyle(
-                            color: selected ? Colors.white : const Color(0xFF1F3556),
+                            color: selected
+                                ? Colors.white
+                                : const Color(0xFF1F3556),
                             fontWeight: FontWeight.w600,
                           ),
                         ),
@@ -109,13 +231,26 @@ SingleChildScrollView(
       case 0:
         return _FeesTab(controllers: _controllers());
       case 1:
-        return _IdConfigTab(memberStart: _memberIdStart, caseStart: _caseIdStart);
+        return _IdConfigTab(
+            memberStart: _memberIdStart, caseStart: _caseIdStart);
       case 2:
-        return _ResidencesTab(service: _service, token: token, ctrl: _residenceCtrl);
+        return _ResidencesTab(
+            service: _service, token: token, ctrl: _residenceCtrl);
       case 3:
         return _OrganizationTab(controllers: _controllers());
       case 4:
-        return _MpesaTab(controllers: _controllers(), token: token, service: _service);
+        return _MpesaTab(
+          shortcode: _mpesaShortcode,
+          consumerKey: _mpesaConsumerKey,
+          consumerSecret: _mpesaConsumerSecret,
+          passkey: _mpesaPasskey,
+          initiatorName: _mpesaInitiatorName,
+          initiatorPassword: _mpesaInitiatorPassword,
+          environment: _mpesaEnv,
+          onEnvironmentChanged: (value) => setState(() => _mpesaEnv = value),
+          token: token,
+          service: _service,
+        );
       case 5:
         return _SmsTab(service: _service, token: token);
       default:
@@ -124,14 +259,14 @@ SingleChildScrollView(
   }
 
   Map<String, TextEditingController> _controllers() => {
-    'orgName': _orgName,
-    'orgPhone': _orgPhone,
-    'orgEmail': _orgEmail,
-    'paybill': _paybill,
-    'regFee': _registrationFee,
-    'renFee': _renewalFee,
-    'penalty': _penaltyAmount,
-  };
+        'orgName': _orgName,
+        'orgPhone': _orgPhone,
+        'orgEmail': _orgEmail,
+        'paybill': _paybill,
+        'regFee': _registrationFee,
+        'renFee': _renewalFee,
+        'penalty': _penaltyAmount,
+      };
 }
 
 class _FeesTab extends StatelessWidget {
@@ -141,13 +276,24 @@ class _FeesTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return _formCard(context, [
-      TextField(controller: controllers['paybill'], decoration: const InputDecoration(labelText: 'Paybill number')),
+      TextField(
+          controller: controllers['paybill'],
+          decoration: const InputDecoration(labelText: 'Paybill number')),
       const SizedBox(height: 12),
-      TextField(controller: controllers['regFee'], decoration: const InputDecoration(labelText: 'Registration fee'), keyboardType: TextInputType.number),
+      TextField(
+          controller: controllers['regFee'],
+          decoration: const InputDecoration(labelText: 'Registration fee'),
+          keyboardType: TextInputType.number),
       const SizedBox(height: 12),
-      TextField(controller: controllers['renFee'], decoration: const InputDecoration(labelText: 'Renewal fee'), keyboardType: TextInputType.number),
+      TextField(
+          controller: controllers['renFee'],
+          decoration: const InputDecoration(labelText: 'Renewal fee'),
+          keyboardType: TextInputType.number),
       const SizedBox(height: 12),
-      TextField(controller: controllers['penalty'], decoration: const InputDecoration(labelText: 'Penalty amount'), keyboardType: TextInputType.number),
+      TextField(
+          controller: controllers['penalty'],
+          decoration: const InputDecoration(labelText: 'Penalty amount'),
+          keyboardType: TextInputType.number),
     ]);
   }
 }
@@ -159,20 +305,44 @@ class _OrganizationTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return _formCard(context, [
-      TextField(controller: controllers['orgName'], decoration: const InputDecoration(labelText: 'Organization name')),
+      TextField(
+          controller: controllers['orgName'],
+          decoration: const InputDecoration(labelText: 'Organization name')),
       const SizedBox(height: 12),
-      TextField(controller: controllers['orgPhone'], decoration: const InputDecoration(labelText: 'Organization phone')),
+      TextField(
+          controller: controllers['orgPhone'],
+          decoration: const InputDecoration(labelText: 'Organization phone')),
       const SizedBox(height: 12),
-      TextField(controller: controllers['orgEmail'], decoration: const InputDecoration(labelText: 'Organization email')),
+      TextField(
+          controller: controllers['orgEmail'],
+          decoration: const InputDecoration(labelText: 'Organization email')),
     ]);
   }
 }
 
 class _MpesaTab extends StatelessWidget {
-  final Map<String, TextEditingController> controllers;
+  final TextEditingController shortcode;
+  final TextEditingController consumerKey;
+  final TextEditingController consumerSecret;
+  final TextEditingController passkey;
+  final TextEditingController initiatorName;
+  final TextEditingController initiatorPassword;
+  final String environment;
+  final ValueChanged<String> onEnvironmentChanged;
   final String token;
   final LiveDataService service;
-  const _MpesaTab({required this.controllers, required this.token, required this.service});
+  const _MpesaTab({
+    required this.shortcode,
+    required this.consumerKey,
+    required this.consumerSecret,
+    required this.passkey,
+    required this.initiatorName,
+    required this.initiatorPassword,
+    required this.environment,
+    required this.onEnvironmentChanged,
+    required this.token,
+    required this.service,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -181,29 +351,61 @@ class _MpesaTab extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('M-Pesa API Configuration', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+          const Text('M-Pesa API Configuration',
+              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
           const SizedBox(height: 12),
-          TextField(controller: controllers['orgPhone'], decoration: const InputDecoration(labelText: 'Shortcode')),
+          TextField(
+              controller: shortcode,
+              decoration: const InputDecoration(labelText: 'Shortcode')),
           const SizedBox(height: 12),
-          TextField(controller: controllers['orgEmail'], decoration: const InputDecoration(labelText: 'Consumer Key')),
+          TextField(
+              controller: consumerKey,
+              decoration: const InputDecoration(labelText: 'Consumer Key')),
           const SizedBox(height: 12),
-          TextField(controller: controllers['orgName'], decoration: const InputDecoration(labelText: 'Consumer Secret'), obscureText: true),
+          TextField(
+              controller: consumerSecret,
+              decoration: const InputDecoration(labelText: 'Consumer Secret'),
+              obscureText: true),
           const SizedBox(height: 12),
-          TextField(controller: controllers['paybill'], decoration: const InputDecoration(labelText: 'Passkey'), obscureText: true),
+          TextField(
+              controller: passkey,
+              decoration: const InputDecoration(labelText: 'Passkey'),
+              obscureText: true),
           const SizedBox(height: 12),
-          TextField(controller: controllers['regFee'], decoration: const InputDecoration(labelText: 'Initiator Name')),
+          TextField(
+              controller: initiatorName,
+              decoration: const InputDecoration(labelText: 'Initiator Name')),
           const SizedBox(height: 12),
-          TextField(controller: controllers['renFee'], decoration: const InputDecoration(labelText: 'Initiator Password'), obscureText: true),
+          TextField(
+              controller: initiatorPassword,
+              decoration:
+                  const InputDecoration(labelText: 'Initiator Password'),
+              obscureText: true),
+          const SizedBox(height: 12),
+          DropdownButtonFormField<String>(
+            initialValue: environment,
+            decoration: const InputDecoration(labelText: 'Environment'),
+            items: const [
+              DropdownMenuItem(value: 'sandbox', child: Text('Sandbox')),
+              DropdownMenuItem(value: 'production', child: Text('Production')),
+            ],
+            onChanged: (value) {
+              if (value != null) onEnvironmentChanged(value);
+            },
+          ),
           const SizedBox(height: 16),
           FilledButton.icon(
             onPressed: () async {
               try {
                 final ok = await service.testMpesaConnection(appToken: token);
                 if (!context.mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(ok ? 'Connection successful!' : 'Connection failed')));
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                    content: Text(
+                        ok ? 'Connection successful!' : 'Connection failed')));
               } catch (e) {
                 if (!context.mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+                ScaffoldMessenger.of(context)
+                    .showSnackBar(SnackBar(content: Text('Error: $e')));
               }
             },
             icon: const Icon(Icons.wifi),
@@ -227,11 +429,18 @@ class _IdConfigTab extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('ID Configuration', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+          const Text('ID Configuration',
+              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
           const SizedBox(height: 12),
-          TextField(controller: memberStart, decoration: const InputDecoration(labelText: 'Member ID Start'), keyboardType: TextInputType.number),
+          TextField(
+              controller: memberStart,
+              decoration: const InputDecoration(labelText: 'Member ID Start'),
+              keyboardType: TextInputType.number),
           const SizedBox(height: 12),
-          TextField(controller: caseStart, decoration: const InputDecoration(labelText: 'Case ID Start'), keyboardType: TextInputType.number),
+          TextField(
+              controller: caseStart,
+              decoration: const InputDecoration(labelText: 'Case ID Start'),
+              keyboardType: TextInputType.number),
           const SizedBox(height: 16),
           Container(
             padding: const EdgeInsets.all(12),
@@ -240,7 +449,8 @@ class _IdConfigTab extends StatelessWidget {
               borderRadius: BorderRadius.circular(12),
               border: Border.all(color: const Color(0xFFE2E8F0)),
             ),
-            child: Text('Preview: M${memberStart.text.padLeft(3, '0')} / C${caseStart.text.padLeft(3, '0')}',
+            child: Text(
+                'Preview: M${memberStart.text.padLeft(3, '0')} / C${caseStart.text.padLeft(3, '0')}',
                 style: const TextStyle(fontWeight: FontWeight.w600)),
           ),
         ],
@@ -253,7 +463,8 @@ class _ResidencesTab extends StatefulWidget {
   final LiveDataService service;
   final String token;
   final TextEditingController ctrl;
-  const _ResidencesTab({required this.service, required this.token, required this.ctrl});
+  const _ResidencesTab(
+      {required this.service, required this.token, required this.ctrl});
 
   @override
   State<_ResidencesTab> createState() => _ResidencesTabState();
@@ -268,17 +479,26 @@ class _ResidencesTabState extends State<_ResidencesTab> {
   }
 
   Future<List<String>> _load() async {
-    final s = await widget.service.fetchSettings(appToken: widget.token);
-    final list = (s?['residences'] as List?)?.whereType<String>().toList() ?? const <String>[];
-    return list;
+    return widget.service.fetchResidences();
   }
 
   Future<void> _add() async {
     final name = widget.ctrl.text.trim();
     if (name.isEmpty) return;
-    widget.ctrl.clear();
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Added residence: $name (placeholder)')));
-    setState(() => _future = _load());
+    try {
+      await widget.service.createResidence(name: name);
+      widget.ctrl.clear();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Added residence: $name')),
+      );
+      setState(() => _future = _load());
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to add residence: $e')),
+      );
+    }
   }
 
   @override
@@ -289,7 +509,11 @@ class _ResidencesTabState extends State<_ResidencesTab> {
           padding: const EdgeInsets.all(16),
           child: Row(
             children: [
-              Expanded(child: TextField(controller: widget.ctrl, decoration: const InputDecoration(labelText: 'New residence'))),
+              Expanded(
+                  child: TextField(
+                      controller: widget.ctrl,
+                      decoration:
+                          const InputDecoration(labelText: 'New residence'))),
               const SizedBox(width: 8),
               FilledButton(onPressed: _add, child: const Text('Add')),
             ],
@@ -299,9 +523,13 @@ class _ResidencesTabState extends State<_ResidencesTab> {
           child: FutureBuilder<List<String>>(
             future: _future,
             builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
               final list = snapshot.data ?? const [];
-              if (list.isEmpty) return const Center(child: Text('No residences configured.'));
+              if (list.isEmpty) {
+                return const Center(child: Text('No residences configured.'));
+              }
               return ListView.builder(
                 itemCount: list.length,
                 itemBuilder: (_, i) => ListTile(title: Text(list[i])),
@@ -337,7 +565,8 @@ class _SmsTabState extends State<_SmsTab> {
   }
 
   Future<void> _showComposer(Map<String, dynamic> template) async {
-    final ctrl = TextEditingController(text: (template['raw_template'] ?? '').toString());
+    final ctrl = TextEditingController(
+        text: (template['raw_template'] ?? '').toString());
     final saved = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -348,8 +577,12 @@ class _SmsTabState extends State<_SmsTab> {
           decoration: const InputDecoration(labelText: 'Template'),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Save')),
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Save')),
         ],
       ),
     );
@@ -361,11 +594,13 @@ class _SmsTabState extends State<_SmsTab> {
           updates: {'raw_template': ctrl.text},
         );
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Template updated')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('Template updated')));
         setState(() => _templatesFuture = _loadTemplates());
       } catch (e) {
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Error: $e')));
       }
     }
   }
@@ -389,8 +624,15 @@ class _SmsTabState extends State<_SmsTab> {
             final t = templates[i];
             return ListTile(
               title: Text('${t['label'] ?? t['trigger_key']}'),
-              subtitle: Text('${t['description'] ?? ''}\n${t['raw_template'] ?? ''}', maxLines: 2, overflow: TextOverflow.ellipsis),
-              trailing: Icon(t['is_active'] == true ? Icons.check_circle : Icons.circle_outlined, color: t['is_active'] == true ? Colors.green : Colors.grey),
+              subtitle: Text(
+                  '${t['description'] ?? ''}\n${t['raw_template'] ?? ''}',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis),
+              trailing: Icon(
+                  t['is_active'] == true
+                      ? Icons.check_circle
+                      : Icons.circle_outlined,
+                  color: t['is_active'] == true ? Colors.green : Colors.grey),
               onTap: () => _showComposer(t),
             );
           },
