@@ -75,10 +75,11 @@ const MemberDashboard = () => {
         window.location.href = "/member/login";
         return;
       }
+      const message = error instanceof Error ? error.message : "Failed to load member data. Please try again.";
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Failed to load member data. Please try again.",
+        description: message,
       });
     } finally {
       setLoading(false);

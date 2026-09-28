@@ -1,9 +1,9 @@
 // CORS handling for Supabase Edge Functions.
 //
-// Origins are driven by the ALLOWED_ORIGINS env var (comma-separated).
-// Falls back to the known production + local-dev origins. The previous
-// wildcard ('*') is gone: privileged functions must not accept requests
-// from arbitrary origins.
+// Allowlist mode: only echoes origins matching malangawelfare variants,
+// Netlify deploy, localhost, or ALLOWED_ORIGINS env (comma-separated,
+// supports "*.example.com" wildcards). Disallowed origins get list[0]
+// so browsers block the read.
 
 const DEFAULT_ALLOWED_ORIGINS = [
   "https://malangawelfare.co.ke",
@@ -24,6 +24,40 @@ function allowedOrigins(): string[] {
   return fromEnv.length > 0 ? fromEnv : DEFAULT_ALLOWED_ORIGINS;
 }
 
+function isAllowedOrigin(origin: string, list: string[]): boolean {
+  const o = origin.trim();
+  if (list.includes(o)) return true;
+  // Env-configured wildcards like https://*.example.com or *.example.com
+  for (const entry of list) {
+    const e = entry.trim();
+    if (!e.includes("*")) continue;
+    const pattern = "^" + e.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\\\*/g, ".*") + "$";
+    try {
+      if (new RegExp(pattern).test(o)) return true;
+    } catch {
+      // ignore bad pattern
+    }
+  }
+  try {
+    const url = new URL(o);
+    const host = url.hostname.toLowerCase();
+    // All malangawelfare variants: apex, www, any subdomain, both TLDs
+    if (
+      host === "malangawelfare.co.ke" ||
+      host.endsWith(".malangawelfare.co.ke") ||
+      host === "malangawelfare.org" ||
+      host.endsWith(".malangawelfare.org")
+    ) {
+      return url.protocol === "https:";
+    }
+    // Local dev on any port
+    if (host === "localhost" || host === "127.0.0.1") return true;
+  } catch {
+    return false;
+  }
+  return false;
+}
+
 const BASE_HEADERS = {
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type, x-app-token, x-retry-count, traceparent, tracestate, baggage",
@@ -31,13 +65,13 @@ const BASE_HEADERS = {
   Vary: "Origin",
 };
 
-// Resolve the Access-Control-Allow-Origin for a specific request. Only echoes
-// the request's Origin when it is in the allowlist; otherwise falls back to the
-// primary allowed origin (which a disallowed browser origin will reject).
+// Resolve the Access-Control-Allow-Origin for a specific request. Echoes
+// the request's Origin when allowlisted, otherwise falls back to list[0]
+// (browser blocks disallowed callers).
 export function buildCorsHeaders(origin?: string | null) {
   const list = allowedOrigins();
   const resolved =
-    origin && list.includes(origin) ? origin : list[0];
+    origin && isAllowedOrigin(origin, list) ? origin.trim() : list[0];
   return {
     ...BASE_HEADERS,
     "Access-Control-Allow-Origin": resolved,
@@ -49,10 +83,13 @@ export function corsFor(req: Request) {
   return buildCorsHeaders(req.headers.get("origin"));
 }
 
-// Backward-compatible static export used by ~30 functions. No longer '*';
-// defaults to the primary allowed origin. Prefer corsFor(req) for correct
-// multi-origin echoing.
-export const corsHeaders = buildCorsHeaders(null);
+// Backward-compatible static export used by ~30 functions. Defaults to the
+// primary allowed origin. Prefer corsFor(req) for correct per-request Origin
+// echoing across all allowlisted variants.
+export const corsHeaders = {
+  ...BASE_HEADERS,
+  "Access-Control-Allow-Origin": "https://malangawelfare.co.ke",
+};
 
 // Helper function to create a CORS response
 export function corsResponse(body: unknown, status = 200) {
