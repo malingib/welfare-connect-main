@@ -2,7 +2,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { corsHeaders } from "../_shared/cors.ts"
 import { requirePrivilegedRole, verifyAppJwtFromRequest } from "../_shared/app_jwt.ts"
-import { isSmsFailure, sendSmsMessage, summarizeSmsFailure } from "../_shared/sms.ts"
+import { isSmsFailure, isValidSmsPhoneNumber, sendSmsMessage, summarizeSmsFailure } from "../_shared/sms.ts"
 
 type RecipientData = {
   phoneNumber: string;
@@ -193,9 +193,9 @@ serve(async (req) => {
       );
     }
 
-    const recipients = rawRecipients.map(toRecipient).filter(Boolean) as RecipientData[];
+    const parsed = rawRecipients.map(toRecipient).filter(Boolean) as RecipientData[];
 
-    if (!recipients.length) {
+    if (!parsed.length) {
       return new Response(
         JSON.stringify({ error: 'At least one valid recipient phone number is required' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -207,26 +207,73 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
     );
 
-    const allResults: Array<{ phoneNumber: string; message: string; result: Awaited<ReturnType<typeof sendSmsMessage>>[0]; recipient: RecipientData }> = [];
-    const skipped: Array<{ phoneNumber: string; reason: string; name?: string }> = [];
+    // Prefer the admin-editable template stored in sms_templates so edits made
+    // in Settings actually affect what gets sent. Fall back to the client
+    // message (manual_custom always uses the client message).
+    let effectiveMessage = message;
+    if (triggerKey && triggerKey !== 'manual_custom') {
+      try {
+        const { data: tpl } = await supabase
+          .from('sms_templates')
+          .select('raw_template')
+          .eq('trigger_key', triggerKey)
+          .maybeSingle();
+        const dbTemplate = String((tpl as { raw_template?: unknown } | null)?.raw_template || '').trim();
+        if (dbTemplate) effectiveMessage = dbTemplate;
+      } catch {
+        // Fall through to the client-supplied message.
+      }
+    }
 
-    for (const recipient of recipients) {
+    const skipped: Array<{ phoneNumber: string; reason: string; name?: string }> = [];
+    const recipients: RecipientData[] = [];
+    for (const recipient of parsed) {
+      // Reject malformed numbers up front instead of letting the provider fail
+      // them (previously produced cryptic SMS_FAILED rows, e.g. '114366708').
+      if (!isValidSmsPhoneNumber(recipient.phoneNumber)) {
+        skipped.push({ phoneNumber: recipient.phoneNumber, reason: 'Invalid phone number', name: recipient.name });
+        continue;
+      }
+      recipients.push(recipient);
+    }
+
+    type SendOutcome = {
+      phoneNumber: string;
+      message: string;
+      result: Awaited<ReturnType<typeof sendSmsMessage>>[0];
+      recipient: RecipientData;
+    };
+    const allResults: SendOutcome[] = [];
+
+    // Process recipients with bounded concurrency. The old strictly-sequential
+    // loop (2 RPCs + lookups + provider HTTP call per recipient) could not
+    // finish large blasts (e.g. 988 recipients) inside the function time limit,
+    // producing partial sends. Personalised tags still require one provider
+    // call per recipient, so we parallelise with a cap instead of one bulk call.
+    const CONCURRENCY = 10;
+    async function processRecipient(recipient: RecipientData): Promise<void> {
       const built = await buildRecipientContext(supabase, recipient, triggerKey);
       if (built.skip) {
         skipped.push({ phoneNumber: recipient.phoneNumber, reason: built.skipReason || 'Skipped', name: recipient.name });
-        continue;
+        return;
       }
-      const personalMessage = resolveTags(message, built.context);
+      const personalMessage = resolveTags(effectiveMessage, built.context);
       const results = await sendSmsMessage([recipient.phoneNumber], personalMessage);
+      if (!results[0]) {
+        skipped.push({ phoneNumber: recipient.phoneNumber, reason: 'Provider returned no result', name: recipient.name });
+        return;
+      }
       allResults.push({ phoneNumber: recipient.phoneNumber, message: personalMessage, result: results[0], recipient });
     }
+    for (let i = 0; i < recipients.length; i += CONCURRENCY) {
+      await Promise.all(recipients.slice(i, i + CONCURRENCY).map(processRecipient));
+    }
 
-    await Promise.all(allResults.map(async ({ phoneNumber, message: personalMessage, result, recipient }) => {
-      const action = isSmsFailure(result) ? 'SMS_FAILED' : result.status === 'delivered' ? 'SMS_DELIVERED' : 'SMS_SENT';
+    // Batch the audit/notification writes instead of one round-trip per row.
+    const auditRows = allResults.map(({ phoneNumber, message: personalMessage, result }) => {
       const isSuccess = !isSmsFailure(result);
-
-      await supabase.from("audit_logs").insert({
-        action,
+      return {
+        action: isSmsFailure(result) ? 'SMS_FAILED' : result.status === 'delivered' ? 'SMS_DELIVERED' : 'SMS_SENT',
         table_name: tableName,
         status: isSuccess ? 'success' : 'error',
         user_id: claims.sub || null,
@@ -239,20 +286,28 @@ serve(async (req) => {
           provider_message_id: result.providerMessageId,
           provider_response: result.raw,
         },
-      });
-
-      if (isSuccess && recipient?.memberId) {
-        await supabase.from("notifications").insert({
-          member_id: recipient.memberId,
-          user_id: claims.sub || null,
-          role: 'member',
-          title: triggerKey === 'overdue_reminder' ? 'Malipo Yamechelewa' : triggerKey === 'case_due' ? 'Malipo Yanakaribia' : triggerKey === 'amount_due' ? 'Deni' : triggerKey === 'welcome_member' ? 'Karibu' : triggerKey === 'payment_received' ? 'Malipo Yamepokelewa' : triggerKey === 'payment_failed' ? 'Malipo Yameshindikana' : 'Ujumbe',
-          message: personalMessage,
-          category: triggerKey,
-          data: { sms: true, phone: phoneNumber, trigger_key: triggerKey },
-        });
-      }
-    }));
+      };
+    });
+    const notificationRows = allResults
+      .filter(({ result, recipient }) => !isSmsFailure(result) && recipient?.memberId)
+      .map(({ phoneNumber, message: personalMessage, recipient }) => ({
+        member_id: recipient.memberId,
+        user_id: claims.sub || null,
+        role: 'member',
+        title: triggerKey === 'overdue_reminder' ? 'Malipo Yamechelewa' : triggerKey === 'case_due' ? 'Malipo Yanakaribia' : triggerKey === 'amount_due' ? 'Deni' : triggerKey === 'welcome_member' ? 'Karibu' : triggerKey === 'payment_received' ? 'Malipo Yamepokelewa' : triggerKey === 'payment_failed' ? 'Malipo Yameshindikana' : 'Ujumbe',
+        message: personalMessage,
+        category: triggerKey,
+        data: { sms: true, phone: phoneNumber, trigger_key: triggerKey },
+      }));
+    const WRITE_BATCH = 200;
+    for (let i = 0; i < auditRows.length; i += WRITE_BATCH) {
+      const chunk = auditRows.slice(i, i + WRITE_BATCH);
+      if (chunk.length) await supabase.from("audit_logs").insert(chunk);
+    }
+    for (let i = 0; i < notificationRows.length; i += WRITE_BATCH) {
+      const chunk = notificationRows.slice(i, i + WRITE_BATCH);
+      if (chunk.length) await supabase.from("notifications").insert(chunk);
+    }
 
     const results = allResults.map(r => r.result);
     const delivered = results.filter((r) => r.status === 'delivered').length;
@@ -260,6 +315,8 @@ serve(async (req) => {
     const sent = results.length - failed;
     const success = failed === 0;
     const errorMessage = summarizeSmsFailure(results);
+    const skippedSummary: Record<string, number> = {};
+    for (const s of skipped) skippedSummary[s.reason] = (skippedSummary[s.reason] || 0) + 1;
 
     return new Response(
       JSON.stringify({
@@ -268,7 +325,7 @@ serve(async (req) => {
         delivered,
         failed,
         skipped: skipped.length,
-        ...(skipped.length ? { skippedDetails: skipped } : {}),
+        ...(skipped.length ? { skippedDetails: skipped, skippedSummary } : {}),
         recipients: allResults.length + skipped.length,
         results,
         ...(success ? {} : { error: errorMessage || 'One or more SMS messages failed' }),

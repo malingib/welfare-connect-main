@@ -55,7 +55,8 @@ import type { Database } from '@/integrations/supabase/types';
 import { loadXlsx } from '@/lib/reportExportLibs';
 import { logSystemEvent } from '@/lib/systemLog';
 import { SmsMessageComposer } from '@/components/messages/SmsMessageComposer';
-import type { SmsRecipient } from '@/lib/smsMessaging';
+import type { SmsRecipient, SmsSendSummary } from '@/lib/smsMessaging';
+import { summarizeSkippedReasons } from '@/lib/smsMessaging';
 
 const getMemberNumberValue = (memberNumber?: string) => {
   if (!memberNumber) return Number.MAX_SAFE_INTEGER;
@@ -529,19 +530,23 @@ const Members = () => {
   const handleSendSms = async (payload: { triggerKey: string; message: string; recipients: SmsRecipient[] }) => {
     setMessageSending(true);
     try {
-      const result = await invokeWithAppToken<{ sent: number; failed: number; recipients: number }>('send-sms', {
+      const result = await invokeWithAppToken<SmsSendSummary>('send-sms', {
         recipients: payload.recipients,
         message: payload.message,
         triggerKey: payload.triggerKey,
         source: 'members_page',
       });
 
+      const skippedNote = result.skipped
+        ? ` ${result.skipped.toLocaleString()} skipped${summarizeSkippedReasons(result) ? ` (${summarizeSkippedReasons(result)})` : ''}.`
+        : '';
       toast({
         title: result.failed ? 'SMS partially sent' : 'SMS sent',
-        description: `${result.sent.toLocaleString()} of ${result.recipients.toLocaleString()} recipient(s) accepted.`,
+        description: `${result.sent.toLocaleString()} of ${result.recipients.toLocaleString()} recipient(s) accepted.${result.failed ? ` ${result.failed.toLocaleString()} failed.` : ''}${skippedNote}`,
         variant: result.failed ? 'destructive' : 'default',
       });
       setMessageDialogOpen(false);
+      return result;
     } catch (error: any) {
       console.error('Error sending SMS:', error);
       toast({

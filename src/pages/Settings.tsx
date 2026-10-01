@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { RefreshCw, Save, Edit, X, MessageSquare, PenLine, ChevronDown, ChevronRight } from 'lucide-react';
 import DashboardLayout from '@/layouts/DashboardLayout';
 import { Button } from '@/components/ui/button';
@@ -8,7 +8,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import ResidenceForm from '@/components/forms/ResidenceForm';
 import { SmsMessageComposer } from '@/components/messages/SmsMessageComposer';
-import type { SmsRecipient } from '@/lib/smsMessaging';
+import type { SmsRecipient, SmsSendSummary, SmsTriggerKey } from '@/lib/smsMessaging';
+import { summarizeSkippedReasons } from '@/lib/smsMessaging';
+import { Checkbox } from '@/components/ui/checkbox';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/components/ui/use-toast';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
@@ -75,6 +77,7 @@ type MembersListResponse = {
     phone_number: string | null;
     status: string | null;
   }>;
+  has_more?: boolean;
 };
 
 const settingsFormSchema = z.object({
@@ -113,6 +116,9 @@ const Settings = () => {
   const [expandedLog, setExpandedLog] = useState<string | null>(null);
   const [smsPage, setSmsPage] = useState(1);
   const [smsPageSize] = useState(20);
+  const [onlyDebtors, setOnlyDebtors] = useState(false);
+  const [debtorIds, setDebtorIds] = useState<Set<string> | null>(null);
+  const [debtFilterLoading, setDebtFilterLoading] = useState(false);
   const [settingsMeta, setSettingsMeta] = useState<Pick<
     SettingsData,
     'has_mpesa_consumer_key' | 'has_mpesa_consumer_secret' | 'has_mpesa_passkey' | 'has_mpesa_initiator_password'
@@ -220,25 +226,59 @@ const Settings = () => {
     const currentPage = page ?? smsPage;
     setSmsLoading(true);
     try {
-      const [summary, membersResult, templatesResult] = await Promise.all([
+      // Load summary + templates first (fast, single requests)
+      const [summary, templatesResult] = await Promise.all([
         invokeWithAppToken<SmsSummary>('api-sms-summary', { page: currentPage, page_size: smsPageSize }),
-        invokeWithAppToken<MembersListResponse>('api-members-list', {
-          status: 'active',
-          limit: 300,
-        }),
         invokeWithAppToken<{ templates: any[] }>('api-sms-templates', {}).catch(() => ({ templates: [] })),
       ]);
 
+      // Fetch ALL active members with phones — sequential pages with timeout+retry
+      // to avoid the burst of 3 parallel requests that fails on slow devices.
+      const allMembers: MembersListResponse['members'] = [];
+      let offset = 0;
+      const maxPages = 20;
+      for (let pageIdx = 0; pageIdx < maxPages; pageIdx++) {
+        let batch: MembersListResponse['members'] = [];
+        let hasMore = false;
+        // Retry each page up to 2 times with exponential backoff
+        for (let attempt = 0; attempt < 3; attempt++) {
+          try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 15000);
+            const membersResult = await invokeWithAppToken<MembersListResponse>('api-members-list', {
+              status: 'active',
+              limit: 300,
+              offset,
+            });
+            clearTimeout(timeoutId);
+            batch = membersResult.members || [];
+            hasMore = membersResult.has_more ?? false;
+            break; // success
+          } catch (e: any) {
+            if (attempt === 2) throw e; // last attempt, rethrow
+            const delay = 500 * Math.pow(2, attempt);
+            await new Promise(r => setTimeout(r, delay));
+          }
+        }
+        allMembers.push(...batch);
+        if (!hasMore || batch.length < 300 || allMembers.length >= 5000) break;
+        offset += 300;
+      }
+
       setSmsSummary(summary);
-      setSmsRecipients((membersResult.members || [])
+      setSmsRecipients(allMembers
         .filter((member) => String(member.phone_number || '').trim().length > 0)
         .map((member) => ({
           id: member.id,
+          memberId: member.id,
           name: member.name || undefined,
           memberNumber: member.member_number || undefined,
           phoneNumber: String(member.phone_number || '').trim(),
           status: member.status || undefined,
         })));
+      // A refresh can change the audience, so drop a stale debtor pre-filter.
+      setDebtorIds(null);
+      setOnlyDebtors(false);
       if (templatesResult?.templates) {
         setSmsTemplates(templatesResult.templates);
       }
@@ -276,22 +316,88 @@ const Settings = () => {
     }
   };
 
+  const smsTemplateOverrides = useMemo(() => {
+    const map: Partial<Record<SmsTriggerKey, string>> = {};
+    for (const tmpl of smsTemplates) {
+      const text = String(tmpl?.raw_template || '').trim();
+      if (tmpl?.trigger_key && text) map[tmpl.trigger_key as SmsTriggerKey] = text;
+    }
+    return map;
+  }, [smsTemplates]);
+
+  const smsComposerRecipients = useMemo(() => {
+    if (!onlyDebtors || !debtorIds) return smsRecipients;
+    return smsRecipients.filter((recipient) => recipient.id && debtorIds.has(recipient.id));
+  }, [smsRecipients, onlyDebtors, debtorIds]);
+
+  const handleToggleDebtFilter = async (enabled: boolean) => {
+    setOnlyDebtors(enabled);
+    if (!enabled || debtorIds) return;
+    setDebtFilterLoading(true);
+    try {
+      const ids = smsRecipients.map((recipient) => recipient.id).filter(Boolean) as string[];
+      const debtors = new Set<string>();
+      for (let i = 0; i < ids.length; i += 500) {
+        const chunk = ids.slice(i, i + 500);
+        let data: any = null;
+        let error: any = null;
+        for (let attempt = 0; attempt < 3; attempt++) {
+          try {
+            const result = await supabase.rpc('get_members_bulk_unpaid_totals', { p_member_ids: chunk });
+            data = result.data;
+            error = result.error;
+            if (!error) break;
+          } catch (e) {
+            error = e;
+          }
+          if (attempt === 2) throw error;
+          await new Promise(r => setTimeout(r, 500 * Math.pow(2, attempt)));
+        }
+        if (error) throw error;
+        for (const row of ((data as Array<{ member_id: string; unpaid_case_count: number }> | null) || [])) {
+          if (Number(row.unpaid_case_count || 0) > 0) debtors.add(row.member_id);
+        }
+      }
+      setDebtorIds(debtors);
+      if (debtors.size === 0) {
+        toast({
+          title: 'No debtors found',
+          description: 'None of the active members currently have unpaid case balances.',
+        });
+      }
+    } catch (error: any) {
+      console.error('Error computing debtor list:', error);
+      setOnlyDebtors(false);
+      toast({
+        variant: 'destructive',
+        title: 'Could not filter debtors',
+        description: error.message || 'The unpaid-balance lookup failed.',
+      });
+    } finally {
+      setDebtFilterLoading(false);
+    }
+  };
+
   const handleSendSms = async (payload: { triggerKey: string; message: string; recipients: SmsRecipient[] }) => {
     setSmsSending(true);
     try {
-      const result = await invokeWithAppToken<{ sent: number; failed: number; recipients: number }>('send-sms', {
+      const result = await invokeWithAppToken<SmsSendSummary>('send-sms', {
         recipients: payload.recipients,
         message: payload.message,
         triggerKey: payload.triggerKey,
         source: 'settings_sms_tab',
       });
 
+      const skippedNote = result.skipped
+        ? ` ${result.skipped.toLocaleString()} skipped${summarizeSkippedReasons(result) ? ` (${summarizeSkippedReasons(result)})` : ''}.`
+        : '';
       toast({
         title: result.failed ? 'SMS partially sent' : 'SMS sent',
-        description: `${result.sent.toLocaleString()} of ${result.recipients.toLocaleString()} recipient(s) accepted.`,
+        description: `${result.sent.toLocaleString()} of ${result.recipients.toLocaleString()} recipient(s) accepted.${result.failed ? ` ${result.failed.toLocaleString()} failed.` : ''}${skippedNote}`,
         variant: result.failed ? 'destructive' : 'default',
       });
       await fetchSmsData();
+      return result;
     } catch (error: any) {
       console.error('Error sending SMS:', error);
       toast({
@@ -1165,12 +1271,31 @@ const Settings = () => {
               </Button>
             </div>
 
+            <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5">
+              <Checkbox
+                id="sms-only-debtors"
+                checked={onlyDebtors}
+                disabled={debtFilterLoading || smsRecipients.length === 0}
+                onCheckedChange={(checked) => void handleToggleDebtFilter(checked === true)}
+              />
+              <label htmlFor="sms-only-debtors" className="text-sm text-slate-700">
+                Only members with unpaid case balances
+                {debtFilterLoading
+                  ? ' — checking balances…'
+                  : debtorIds
+                    ? ` (${debtorIds.size.toLocaleString()} of ${smsRecipients.length.toLocaleString()})`
+                    : ' (recommended for overdue / amount-due triggers)'}
+              </label>
+            </div>
+
             <SmsMessageComposer
-              recipients={smsRecipients}
-              audienceLabel="Active members with phone numbers"
+              recipients={smsComposerRecipients}
+              audienceLabel={onlyDebtors ? 'Active members with unpaid balances' : 'Active members with phone numbers'}
               audienceDescription="Send a Mobiwave SMS to active members that have phone numbers on file."
               onSend={handleSendSms}
               isSending={smsSending}
+              templateOverrides={smsTemplateOverrides}
+              templatesVersion={refreshTrigger}
             />
 
             <Card>

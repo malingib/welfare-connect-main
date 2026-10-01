@@ -52,6 +52,22 @@ serve(async (req) => {
       });
     }
 
+    // Prefer admin-editable templates from sms_templates so Settings edits
+    // affect the automated reminders too. Fall back to built-in defaults.
+    const dbTemplates: Record<string, string> = {};
+    try {
+      const { data: tplRows } = await supabase
+        .from("sms_templates")
+        .select("trigger_key, raw_template")
+        .in("trigger_key", ["overdue_reminder", "case_due"]);
+      for (const row of (tplRows as Array<{ trigger_key: string; raw_template: string }> | null) || []) {
+        const text = String(row?.raw_template || "").trim();
+        if (row?.trigger_key && text) dbTemplates[row.trigger_key] = text;
+      }
+    } catch {
+      // Fall through to built-in defaults.
+    }
+
     const sent: { member_id: string; case_number: string; trigger: string }[] = [];
 
     for (const member of members) {
@@ -72,10 +88,12 @@ serve(async (req) => {
 
         if (deadline < today) {
           triggerKey = "overdue_reminder";
-          rawTemplate = "Mwanachama mpendwa, malipo ya case {caseNumber} yamechelewa. Tafadhali lipa KES {amount} haraka iwezekanavyo.";
+          rawTemplate = dbTemplates["overdue_reminder"] ||
+            "Mwanachama mpendwa, malipo ya case {caseNumber} yamechelewa. Tafadhali lipa KES {amount} haraka iwezekanavyo.";
         } else if (deadline <= threeDaysFromNow) {
           triggerKey = "case_due";
-          rawTemplate = "Mwanachama mpendwa, hujalipa case {caseNumber}. Tafadhali lipa KES {amount} kwa paybill 4164179 account {memberNumber} kabla {deadline}.";
+          rawTemplate = dbTemplates["case_due"] ||
+            "Mwanachama mpendwa, hujalipa case {caseNumber}. Tafadhali lipa KES {amount} kwa paybill 4164179 account {memberNumber} kabla {deadline}.";
         } else {
           continue;
         }

@@ -183,6 +183,46 @@ function normalizePhone(phone: string): string {
   return digits;
 }
 
+export function isValidKenyanSmsPhone(phone: string): boolean {
+  // Mirrors the backend check in supabase/functions/_shared/sms.ts.
+  // Kenyan mobiles: 254 + (7|1) + 8 digits. Anything else (e.g. '114366708')
+  // is rejected by the provider, so we exclude it up front with an explanation.
+  return /^254(7|1)\d{8}$/.test(normalizePhone(phone));
+}
+
+export type SmsSkippedDetail = {
+  phoneNumber: string;
+  reason: string;
+  name?: string;
+};
+
+export type SmsSendSummary = {
+  sent: number;
+  failed: number;
+  skipped: number;
+  recipients: number;
+  skippedDetails?: SmsSkippedDetail[];
+  skippedSummary?: Record<string, number>;
+};
+
+export function summarizeSkippedReasons(summary: SmsSendSummary | null | undefined): string {
+  const entries = Object.entries(summary?.skippedSummary || {});
+  if (!entries.length) return '';
+  return entries.map(([reason, count]) => `${count.toLocaleString()} × ${reason}`).join('; ');
+}
+
+export function partitionSmsRecipients(
+  recipients: SmsRecipient[],
+): { valid: SmsRecipient[]; invalid: SmsRecipient[] } {
+  const valid: SmsRecipient[] = [];
+  const invalid: SmsRecipient[] = [];
+  for (const recipient of normalizeSmsRecipients(recipients)) {
+    if (isValidKenyanSmsPhone(recipient.phoneNumber)) valid.push(recipient);
+    else invalid.push(recipient);
+  }
+  return { valid, invalid };
+}
+
 export function normalizeSmsRecipients(
   recipients: SmsRecipient[],
 ): SmsRecipient[] {
