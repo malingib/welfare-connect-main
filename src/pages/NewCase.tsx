@@ -210,31 +210,6 @@ const NewCase = () => {
       invokeWithAppToken('api-trigger-waterfall', { case_id: caseResult.id })
         .catch(err => console.error('Error triggering wallet waterfall:', err));
 
-      // Send SMS notification for new case (best-effort)
-      try {
-        const affectedMember = members.find(m => m.id === caseResult.affected_member_id);
-        if (affectedMember?.phoneNumber) {
-          const deadline = caseResult.end_date ? new Date(caseResult.end_date).toLocaleDateString() : 'N/A';
-
-          invokeWithAppToken('send-sms', {
-            recipients: [{
-              phoneNumber: affectedMember.phoneNumber,
-              name: affectedMember.name,
-              memberNumber: affectedMember.memberNumber,
-              memberId: affectedMember.id,
-              caseNumber: caseResult.case_number,
-              amount: Number(caseResult.expected_amount || 0).toLocaleString(),
-              deadline,
-            }],
-            message: 'Malanga Welfare: Case {caseNumber} has been opened. Member: {name}. Expected amount: KES {amount}. Deadline: {deadline}.',
-            triggerKey: 'case_opened',
-            source: 'case_creation',
-          });
-        }
-      } catch (smsError) {
-        console.error('Error sending case SMS:', smsError);
-      }
-
       navigate(`/cases/${caseResult.id}`);
     } catch (error) {
       console.error('Error:', error);

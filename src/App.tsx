@@ -28,6 +28,8 @@ const Dashboard = lazy(() => import("./pages/Dashboard"));
 const Members = lazy(() => import("./pages/Members"));
 const MemberDetails = lazy(() => import("./pages/MemberDetails"));
 const NewMember = lazy(() => import("./pages/NewMember"));
+const MembershipApplication = lazy(() => import("./pages/MembershipApplication"));
+const Applications = lazy(() => import("./pages/Applications"));
 const Cases = lazy(() => import("./pages/Cases"));
 const CaseDetails = lazy(() => import("./pages/CaseDetails"));
 const NewCase = lazy(() => import("./pages/NewCase"));
@@ -83,6 +85,9 @@ const App = () => (
           <Route path="/" element={<Index />} />
           <Route path="/login" element={<Login />} />
           <Route path="/admin/login" element={<Navigate to="/login" replace />} />
+          <Route path="/apply" element={<MembershipApplication />} />
+          <Route path="/signup" element={<MembershipApplication />} />
+          <Route path="/register" element={<MembershipApplication />} />
           <Route
             path="/dashboard"
             element={
@@ -112,6 +117,14 @@ const App = () => (
             element={
               <ProtectedRoute allowedRoles={MEMBER_MANAGEMENT_ROLES}>
                 <NewMember />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/applications"
+            element={
+              <ProtectedRoute allowedRoles={MEMBER_MANAGEMENT_ROLES}>
+                <Applications />
               </ProtectedRoute>
             }
           />

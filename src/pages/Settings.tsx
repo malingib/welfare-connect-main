@@ -22,6 +22,7 @@ import { z } from 'zod';
 import { Plus } from 'lucide-react';
 import { invokeWithAppToken } from '@/lib/appAuth';
 import { fetchSafeSettings } from '@/lib/settingsClient';
+import { listAdminUsers, type AdminUserRow } from '@/lib/adminUsersApi';
 
 interface Residence {
   id: string;
@@ -80,6 +81,30 @@ type MembersListResponse = {
   has_more?: boolean;
 };
 
+type SmsAlertSetting = {
+  trigger_key: string;
+  admin_user_ids: string[];
+  is_active: boolean;
+  updated_at?: string;
+};
+
+const smsAlertEvents = [
+  { key: 'registration_submitted', label: 'Registration submitted', description: 'A new membership application has been submitted.' },
+  { key: 'registration_pending_review', label: 'Registration pending review', description: 'An application is waiting for Committee review.' },
+  { key: 'registration_approved', label: 'Registration approved', description: 'An applicant has been approved and should pay the registration fee.' },
+  { key: 'registration_rejected', label: 'Registration rejected', description: 'An application has been rejected.' },
+  { key: 'payment_received', label: 'Payment received', description: 'A member payment has been received.' },
+  { key: 'payment_failed', label: 'Payment failed or needs attention', description: 'A payment failed or could not be confirmed.' },
+  { key: 'case_opened', label: 'Case opened', description: 'A welfare case has been opened.' },
+  { key: 'case_closed', label: 'Case closed', description: 'A welfare case has been closed.' },
+  { key: 'status_changed', label: 'Member status changed', description: 'A member status changed manually.' },
+  { key: 'auto_inactive', label: 'Suspension / inactive status', description: 'A member was suspended or became inactive.' },
+  { key: 'penalty_posted', label: 'Penalty posted', description: 'A penalty was posted to a member account.' },
+  { key: 'probation_ending', label: 'Probation ending', description: 'A member probation period is nearing its end.' },
+  { key: 'probation_completed', label: 'Probation completed', description: 'A member became a full member.' },
+  { key: 'closed_case_overdue', label: 'Closed case overdue', description: 'A closed-case balance remains unpaid.' },
+] as const;
+
 const settingsFormSchema = z.object({
   registration_fee: z.coerce.number().min(0, 'Fee must be a positive number'),
   renewal_fee: z.coerce.number().min(0, 'Fee must be a positive number'),
@@ -113,6 +138,10 @@ const Settings = () => {
   const [editingTemplate, setEditingTemplate] = useState<string | null>(null);
   const [editingRawTemplate, setEditingRawTemplate] = useState('');
   const [smsTemplatesSaving, setSmsTemplatesSaving] = useState(false);
+  const [smsAlertSettings, setSmsAlertSettings] = useState<SmsAlertSetting[]>([]);
+  const [smsAlertAdmins, setSmsAlertAdmins] = useState<AdminUserRow[]>([]);
+  const [smsAlertLoading, setSmsAlertLoading] = useState(false);
+  const [smsAlertSaving, setSmsAlertSaving] = useState<string | null>(null);
   const [expandedLog, setExpandedLog] = useState<string | null>(null);
   const [smsPage, setSmsPage] = useState(1);
   const [smsPageSize] = useState(20);
@@ -210,6 +239,7 @@ const Settings = () => {
 
   useEffect(() => {
     void fetchSmsData(1);
+    void fetchSmsAlertSettings();
     const id = window.setInterval(() => fetchSmsData(), 30000);
     return () => window.clearInterval(id);
   }, []);
@@ -293,6 +323,43 @@ const Settings = () => {
       setSmsLoading(false);
     }
   };
+
+  const fetchSmsAlertSettings = async () => {
+    setSmsAlertLoading(true);
+    try {
+      const [settingsResult, admins] = await Promise.all([
+        invokeWithAppToken<{ settings: SmsAlertSetting[] }>('api-sms-alert-settings', { action: 'list' }),
+        listAdminUsers(),
+      ]);
+      setSmsAlertSettings(settingsResult.settings || []);
+      setSmsAlertAdmins((admins || []).filter((admin) => admin.is_active && admin.role !== 'member'));
+    } catch (error: any) {
+      toast({ variant: 'destructive', title: 'Failed to load SMS alert settings', description: error.message });
+    } finally {
+      setSmsAlertLoading(false);
+    }
+  };
+
+  const saveSmsAlertRecipients = async (triggerKey: string, adminUserIds: string[]) => {
+    setSmsAlertSaving(triggerKey);
+    try {
+      const result = await invokeWithAppToken<{ setting: SmsAlertSetting }>('api-sms-alert-settings', {
+        action: 'update', trigger_key: triggerKey, admin_user_ids: adminUserIds,
+      });
+      setSmsAlertSettings((current) => [
+        ...current.filter((item) => item.trigger_key !== triggerKey),
+        result.setting,
+      ].sort((a, b) => a.trigger_key.localeCompare(b.trigger_key)));
+      toast({ title: 'Alert recipients saved' });
+    } catch (error: any) {
+      toast({ variant: 'destructive', title: 'Failed to save alert recipients', description: error.message });
+    } finally {
+      setSmsAlertSaving(null);
+    }
+  };
+
+  const getAlertRecipients = (triggerKey: string) =>
+    smsAlertSettings.find((setting) => setting.trigger_key === triggerKey)?.admin_user_ids || [];
 
   const handleSaveTemplate = async (triggerKey: string) => {
     setSmsTemplatesSaving(true);
@@ -1235,7 +1302,13 @@ const Settings = () => {
             </Card>
           </TabsContent>
           <TabsContent value="sms" className="space-y-4">
-            <div className="grid gap-4 md:grid-cols-4">
+            <Tabs defaultValue="delivery" className="space-y-4">
+              <TabsList className="grid h-auto w-full grid-cols-2">
+                <TabsTrigger value="delivery">SMS & Templates</TabsTrigger>
+                <TabsTrigger value="recipients">Member Alert Recipients</TabsTrigger>
+              </TabsList>
+              <TabsContent value="delivery" className="space-y-4">
+                <div className="grid gap-4 md:grid-cols-4">
               <Card>
                 <CardHeader className="pb-2">
                   <CardDescription>Mobiwave balance</CardDescription>
@@ -1262,7 +1335,7 @@ const Settings = () => {
                   <CardTitle className="text-2xl">{(smsSummary?.failed || 0).toLocaleString()}</CardTitle>
                 </CardHeader>
               </Card>
-            </div>
+                </div>
 
             <div className="flex justify-end">
               <Button type="button" variant="outline" onClick={() => void fetchSmsData()} disabled={smsLoading}>
@@ -1471,6 +1544,75 @@ const Settings = () => {
                 )}
               </CardContent>
             </Card>
+              </TabsContent>
+              <TabsContent value="recipients" className="space-y-4">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Member Alert SMS Recipients</CardTitle>
+                    <CardDescription>
+                      Select the active administrators who should receive a copy of each member, payment, case, suspension, penalty, probation, or registration alert. Choose one or two administrators for routine events; leave an event unselected if no admin SMS is required.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {smsAlertLoading ? (
+                      <p className="text-sm text-muted-foreground">Loading administrators and alert settings…</p>
+                    ) : smsAlertAdmins.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">No active administrators with SMS-ready accounts were found.</p>
+                    ) : (
+                      <div className="space-y-3">
+                        {smsAlertEvents.map((event) => {
+                          const selected = getAlertRecipients(event.key);
+                          return (
+                            <div key={event.key} className="rounded-lg border p-3">
+                              <div className="mb-2">
+                                <p className="font-semibold text-sm">{event.label}</p>
+                                <p className="text-xs text-muted-foreground">{event.description}</p>
+                              </div>
+                              <div className="grid gap-2 sm:grid-cols-2">
+                                {smsAlertAdmins.map((admin) => {
+                                  const checked = selected.includes(admin.id);
+                                  return (
+                                    <label key={admin.id} className="flex items-start gap-2 rounded-md border bg-slate-50 p-2 text-sm">
+                                      <Checkbox
+                                        checked={checked}
+                                        onCheckedChange={(value) => {
+                                          const next = value === true
+                                            ? [...selected, admin.id]
+                                            : selected.filter((id) => id !== admin.id);
+                                          setSmsAlertSettings((current) => [
+                                            ...current.filter((item) => item.trigger_key !== event.key),
+                                            { trigger_key: event.key, admin_user_ids: next, is_active: true },
+                                          ]);
+                                        }}
+                                      />
+                                      <span>
+                                        <span className="block font-medium">{admin.name} <Badge variant="outline" className="ml-1 text-[10px]">{admin.role}</Badge></span>
+                                        <span className="block text-xs text-muted-foreground">{admin.phone_number || 'No linked phone number'}</span>
+                                      </span>
+                                    </label>
+                                  );
+                                })}
+                              </div>
+                              <div className="mt-3 flex justify-end">
+                                <Button
+                                  size="sm"
+                                  onClick={() => void saveSmsAlertRecipients(event.key, getAlertRecipients(event.key))}
+                                  disabled={smsAlertSaving === event.key}
+                                >
+                                  <Save className="mr-1 h-3.5 w-3.5" />
+                                  {smsAlertSaving === event.key ? 'Saving…' : 'Save recipients'}
+                                </Button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                    <p className="text-xs text-muted-foreground">Admin SMS delivery uses the phone number on the administrator’s linked member record. Update that member phone number if it changes.</p>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+            </Tabs>
           </TabsContent>
         </Tabs>
       </div>

@@ -45,6 +45,7 @@ export const USER_MANAGEMENT_ROLES: UserRole[] = [UserRole.SUPER_ADMIN];
 const ROUTE_ACCESS_RULES: Array<{ matcher: RegExp; roles: UserRole[] }> = [
   { matcher: /^\/dashboard$/, roles: ADMIN_ROLES },
   { matcher: /^\/members$/, roles: MEMBER_MANAGEMENT_ROLES },
+  { matcher: /^\/applications$/, roles: MEMBER_MANAGEMENT_ROLES },
   { matcher: /^\/members\/new$/, roles: MEMBER_MANAGEMENT_ROLES },
   { matcher: /^\/members\/[^/]+$/, roles: MEMBER_MANAGEMENT_ROLES },
   { matcher: /^\/cases$/, roles: MEMBER_MANAGEMENT_ROLES },

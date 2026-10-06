@@ -270,8 +270,9 @@ const Index = () => {
   );
 
   const active = HERO_SLIDES[slide];
-  const goJoin = () => navigate('/member/login');
+  const goJoin = () => navigate('/apply');
   const goAdmin = () => navigate('/login');
+  const goMemberPortal = () => navigate('/login?role=member');
 
   return (
     <div className="min-h-screen bg-[#faf8f2] font-sans text-slate-900 antialiased">
@@ -329,7 +330,7 @@ const Index = () => {
             <Button variant="outline" className="hidden border-slate-300 md:inline-flex" onClick={goJoin}>
               <Heart className="mr-2 h-4 w-4 text-[#b45309]" /> Become a Member
             </Button>
-            <Button className="bg-[#c2410c] text-white hover:bg-[#9a3412]" onClick={goJoin}>
+            <Button className="bg-[#c2410c] text-white hover:bg-[#9a3412]" onClick={goAdmin}>
               Portal Login <ArrowRight className="ml-2 h-4 w-4" />
             </Button>
             <button
@@ -360,7 +361,7 @@ const Index = () => {
               ))}
               <div className="mt-2 flex gap-2">
                 <Button variant="outline" className="flex-1" onClick={goAdmin}>Admin Sign In</Button>
-                <Button className="flex-1 bg-[#c2410c] hover:bg-[#9a3412]" onClick={goJoin}>Member Portal</Button>
+                <Button className="flex-1 bg-[#c2410c] hover:bg-[#9a3412]" onClick={goMemberPortal}>Member Portal</Button>
               </div>
             </div>
           </nav>

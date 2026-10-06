@@ -21,6 +21,12 @@ verify_jwt = false
 [functions.api-sms-templates]
 verify_jwt = false
 
+[functions.api-sms-alert-settings]
+verify_jwt = false
+
+[functions.api-membership-applications]
+verify_jwt = false
+
 [functions.api-notifications-mark-read]
 verify_jwt = false
 

@@ -13,6 +13,7 @@ import {
   CreditCard,
   Wallet,
   UserCog,
+  ClipboardList,
   ChevronLeft,
   ChevronRight
 } from 'lucide-react';
@@ -37,6 +38,7 @@ interface SidebarProps {
 const defaultLinks = [
   { icon: <Home className="w-5 h-5" />, label: "Dashboard", href: "/dashboard" },
   { icon: <Users className="w-5 h-5" />, label: "Members", href: "/members" },
+  { icon: <ClipboardList className="w-5 h-5" />, label: "Applications", href: "/applications" },
   { icon: <Calendar className="w-5 h-5" />, label: "Cases", href: "/cases" },
   { icon: <CreditCard className="w-5 h-5" />, label: "Transactions", href: "/transactions" },
   { icon: <Wallet className="w-5 h-5" />, label: "Accounts", href: "/accounts" },
@@ -61,6 +63,7 @@ const Sidebar = ({ sidebarItems, links, collapsed = false, onToggleCollapsed, on
     }
   })();
   const hasMemberSession = !!localStorage.getItem('member_member_id');
+  const homeHref = hasMemberSession ? '/member/dashboard' : '/dashboard';
   
   // Use the passed sidebarItems if provided, otherwise use the default ones
   const items = (sidebarItems || links || defaultLinks).filter((item) => {
@@ -78,7 +81,7 @@ const Sidebar = ({ sidebarItems, links, collapsed = false, onToggleCollapsed, on
     <aside className="bg-sidebar w-full h-full flex flex-col border-r border-sidebar-border shadow-sm z-10 transition-colors duration-300">
       <div className={cn("flex-shrink-0 p-3 md:p-4 lg:p-5", collapsed && "p-2 md:p-3")}>
         <div className="flex items-center justify-between gap-2">
-          <Link to="/dashboard" className={cn("flex items-center", collapsed ? "justify-center" : "")} aria-label="Go to dashboard">
+          <Link to={homeHref} className={cn("flex items-center", collapsed ? "justify-center" : "")} aria-label="Go to dashboard">
             {collapsed ? (
               <div className="h-8 w-8 rounded-lg bg-sidebar-primary text-sidebar-primary-foreground flex items-center justify-center text-xs font-bold shadow-sm">
                 MW

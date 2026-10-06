@@ -232,3 +232,37 @@ export async function invokeWithAppToken<T = unknown>(
     throw new Error(`Server error in ${functionName}. The function returned an invalid JSON response.`);
   }
 }
+
+export async function invokePublicFunction<T = unknown>(
+  functionName: string,
+  body?: Record<string, unknown>,
+): Promise<T> {
+  const baseUrl = getSupabaseBaseUrl(SUPABASE_URL);
+  if (!baseUrl || !SUPABASE_ANON_KEY) {
+    throw new Error(
+      "Missing or invalid Supabase configuration. Use the project URL like https://<project-ref>.supabase.co, not the root dashboard URL."
+    );
+  }
+
+  const response = await fetch(buildSupabaseFunctionUrl(functionName), {
+    method: "POST",
+    credentials: "omit",
+    headers: {
+      apikey: SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body ?? {}),
+  });
+  const responseText = await response.text().catch(() => "");
+  if (!response.ok) {
+    try {
+      const payload = JSON.parse(responseText) as { error?: string; message?: string };
+      throw new Error(payload.error || payload.message || "Request failed");
+    } catch (error) {
+      if (error instanceof Error && error.message !== "Request failed") throw error;
+      throw new Error(responseText || "Request failed");
+    }
+  }
+  return (responseText ? JSON.parse(responseText) : {}) as T;
+}

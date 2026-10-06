@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { z } from 'zod';
 import { ArrowRight, Loader2, ShieldCheck } from 'lucide-react';
 import { useForm } from 'react-hook-form';
@@ -415,6 +416,10 @@ const Login = () => {
               </Button>
             </form>
           )}
+          <div className="mt-6 flex flex-wrap items-center justify-between gap-2 text-sm">
+            <Link to="/" className="text-primary underline-offset-4 hover:underline">Back Home</Link>
+            <Link to="/signup" className="text-primary underline-offset-4 hover:underline">New member? Apply online</Link>
+          </div>
         </section>
       </div>
     </div>

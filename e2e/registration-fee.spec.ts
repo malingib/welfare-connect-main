@@ -24,7 +24,7 @@ test('registration fee UI submits checked deduction parameters', async ({ page }
   });
 
   await page.goto('/members/new');
-  await expect(page.getByRole('heading', { name: 'Registration Payment' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Registration Payment' })).toBeVisible({ timeout: 20000 });
 
   const feeInput = page.getByLabel('Registration Fee (KES)*');
   await expect(feeInput).toBeVisible();

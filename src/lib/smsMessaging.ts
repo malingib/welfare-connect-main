@@ -1,6 +1,11 @@
 export type SmsTriggerKey =
   | 'welcome_member'
+  | 'registration_submitted'
+  | 'registration_pending_review'
+  | 'registration_approved'
+  | 'registration_rejected'
   | 'case_opened'
+  | 'case_closed'
   | 'payment_received'
   | 'payment_failed'
   | 'case_due'
@@ -44,12 +49,44 @@ export type SmsTemplate = {
   key: SmsTriggerKey;
   label: string;
   description: string;
-  category: 'member' | 'case' | 'payment' | 'renewal' | 'custom';
+  category: 'member' | 'case' | 'payment' | 'renewal' | 'registration' | 'custom';
   message: (context: SmsTemplateContext) => string;
   rawTemplate: string;
 };
 
 export const smsTemplates: SmsTemplate[] = [
+  {
+    key: 'registration_submitted',
+    label: 'Registration Submitted',
+    description: 'Confirm a membership application was received.',
+    category: 'member',
+    message: () => 'Malanga Welfare: Your membership application has been received and is awaiting review.',
+    rawTemplate: 'Malanga Welfare: Your membership application has been received and is awaiting review.',
+  },
+  {
+    key: 'registration_pending_review',
+    label: 'Registration Pending Review',
+    description: 'Notify an applicant that review is pending.',
+    category: 'member',
+    message: () => 'Malanga Welfare: Your membership application is pending Welfare Committee review.',
+    rawTemplate: 'Malanga Welfare: Your membership application is pending Welfare Committee review.',
+  },
+  {
+    key: 'registration_approved',
+    label: 'Registration Approved',
+    description: 'Request registration-fee payment after approval.',
+    category: 'payment',
+    message: ({ memberNumber }) => `Malanga Welfare: Your application has been approved. Pay the registration fee using reference ${memberNumber || 'provided'}.`,
+    rawTemplate: 'Malanga Welfare: Your application has been approved. Pay the registration fee using reference {memberNumber}.',
+  },
+  {
+    key: 'registration_rejected',
+    label: 'Registration Rejected',
+    description: 'Notify an applicant that the application was not approved.',
+    category: 'member',
+    message: () => 'Malanga Welfare: Your membership application was not approved. Please contact the Welfare Committee for assistance.',
+    rawTemplate: 'Malanga Welfare: Your membership application was not approved. Please contact the Welfare Committee for assistance.',
+  },
   {
     key: 'welcome_member',
     label: 'Welcome Member',
@@ -77,6 +114,14 @@ export const smsTemplates: SmsTemplate[] = [
       'Mwanachama: {name}.',
       'Tarehe: {deadline}.',
     ].join(' '),
+  },
+  {
+    key: 'case_closed',
+    label: 'Case Closed',
+    description: 'Notify members when a welfare case is closed.',
+    category: 'case',
+    message: ({ caseNumber }) => `Malanga Welfare: Case ${caseNumber || 'N/A'} has been closed. Thank you for your support.`,
+    rawTemplate: 'Malanga Welfare: Case {caseNumber} has been closed. Thank you for your support.',
   },
   {
     key: 'payment_received',
@@ -305,4 +350,3 @@ export function normalizeSmsRecipients(
     }))
     .filter((recipient) => recipient.phoneNumber.length > 0);
 }
-

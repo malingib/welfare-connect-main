@@ -71,7 +71,16 @@ serve(async (req) => {
         .order("created_at", { ascending: false });
 
       if (error) throw error;
-      return jsonResponse(req, 200, { users: data || [] });
+      const memberIds = (data || []).map((row) => row.member_id).filter(Boolean) as string[];
+      const { data: members } = memberIds.length
+        ? await supabase.from("members").select("id, phone_number").in("id", memberIds)
+        : { data: [] };
+      const phones = new Map((members || []).map((row) => [String(row.id), row.phone_number]));
+      const users = (data || []).map((row) => ({
+        ...row,
+        phone_number: row.member_id ? phones.get(String(row.member_id)) || null : null,
+      }));
+      return jsonResponse(req, 200, { users });
     }
 
     if (action === "update_status") {

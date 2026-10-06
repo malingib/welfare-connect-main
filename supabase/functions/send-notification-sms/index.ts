@@ -10,15 +10,21 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { corsFor } from "../_shared/cors.ts";
-import { isSmsFailure, sendSmsMessage } from "../_shared/sms.ts";
+import { isSmsFailure, sendSmsMessage, type SmsSendResult } from "../_shared/sms.ts";
 
 const SWEPT_CATEGORIES = [
+  "registration_submitted",
+  "registration_pending_review",
+  "registration_approved",
+  "registration_rejected",
   "probation_completed",
   "probation_ending",
   "penalty_posted",
   "status_changed",
   "auto_inactive",
   "closed_case_overdue",
+  "case_opened",
+  "case_closed",
 ];
 
 const SWEEP_WINDOW_HOURS = 48;
@@ -72,24 +78,60 @@ serve(async (req) => {
       }
     }
 
+    const { data: routingRows } = await supabase
+      .from("sms_alert_recipient_settings")
+      .select("trigger_key, admin_user_ids, is_active");
+    const adminIdsByTrigger = new Map<string, string[]>();
+    for (const row of (routingRows || []) as Array<{ trigger_key: string; admin_user_ids: string[] | null; is_active: boolean }>) {
+      if (row.is_active !== false) adminIdsByTrigger.set(row.trigger_key, row.admin_user_ids || []);
+    }
+
+    const configuredAdminIds = [...new Set([...adminIdsByTrigger.values()].flat())];
+    const adminPhoneById = new Map<string, string>();
+    if (configuredAdminIds.length) {
+      const { data: admins } = await supabase
+        .from("users")
+        .select("id, member_id, is_active, role")
+        .in("id", configuredAdminIds)
+        .eq("is_active", true)
+        .neq("role", "member");
+      const linkedMemberIds = (admins || []).map((admin) => admin.member_id).filter(Boolean) as string[];
+      if (linkedMemberIds.length) {
+        const { data: adminMembers } = await supabase
+          .from("members")
+          .select("id, phone_number")
+          .in("id", linkedMemberIds);
+        const phoneByMember = new Map((adminMembers || []).map((member) => [String(member.id), String(member.phone_number || "").trim()]));
+        for (const admin of admins || []) {
+          const phone = admin.member_id ? phoneByMember.get(String(admin.member_id)) : "";
+          if (phone) adminPhoneById.set(String(admin.id), phone);
+        }
+      }
+    }
+
     let sent = 0;
     let failed = 0;
     let skipped = 0;
 
     for (const n of pending as Array<{ id: string; member_id: string; message: string; category: string }>) {
       const phone = phoneByMember.get(String(n.member_id)) || "";
-      if (!phone) {
-        skipped += 1;
-        continue;
-      }
+      const adminPhones = [...new Set((adminIdsByTrigger.get(n.category) || [])
+        .map((adminId) => adminPhoneById.get(adminId) || "")
+        .filter(Boolean))];
 
       try {
-        const results = await sendSmsMessage([phone], String(n.message || ""));
-        const result = results[0];
-        const smsOk = result && !isSmsFailure(result);
+        let smsOk = !phone;
+        let result: SmsSendResult | null = null;
+        if (phone) {
+          const results = await sendSmsMessage([phone], String(n.message || ""));
+          result = results[0];
+          smsOk = Boolean(result && !isSmsFailure(result));
+        } else {
+          skipped += 1;
+        }
 
         await supabase.from("audit_logs").insert({
-          action: smsOk ? "SMS_SENT" : "SMS_FAILED",
+          action: phone ? (smsOk ? "SMS_SENT" : "SMS_FAILED") : "SMS_SKIPPED",
           table_name: "sms",
           status: smsOk ? "success" : "error",
           user_id: null,
@@ -104,7 +146,31 @@ serve(async (req) => {
           },
         });
 
-        if (smsOk) {
+        let adminSent = 0;
+        for (const adminPhone of adminPhones) {
+          const adminResults = await sendSmsMessage([adminPhone], `[Admin alert] ${String(n.message || "")}`);
+          const adminResult = adminResults[0];
+          const adminOk = Boolean(adminResult && !isSmsFailure(adminResult));
+          await supabase.from("audit_logs").insert({
+            action: adminOk ? "SMS_SENT" : "SMS_FAILED",
+            table_name: "sms",
+            status: adminOk ? "success" : "error",
+            user_id: null,
+            metadata: {
+              source: "notification_admin_routing",
+              trigger_key: n.category,
+              phone_number: adminPhone,
+              message: n.message,
+              member_id: n.member_id,
+              notification_id: n.id,
+              recipient_type: "admin",
+              provider_message_id: adminResult?.providerMessageId || null,
+            },
+          });
+          if (adminOk) adminSent += 1;
+        }
+
+        if (smsOk || adminSent > 0) {
           await supabase
             .from("notifications")
             .update({ sms_sent_at: new Date().toISOString() })
