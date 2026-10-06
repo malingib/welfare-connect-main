@@ -1,14 +1,15 @@
 // Simplified Supabase client configuration
 // CORS is handled at the API gateway level
 
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { createClient } from '@supabase/supabase-js';
+import { getSupabaseBaseUrl } from '@/lib/appAuth';
 import type { Database } from './types';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseUrl = getSupabaseBaseUrl(import.meta.env.VITE_SUPABASE_URL);
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error('Missing Supabase environment variables');
+  throw new Error('Missing or invalid Supabase environment variables. Use the project URL like https://<project-ref>.supabase.co, not the root dashboard URL.');
 }
 
 // Import the supabase client like this:

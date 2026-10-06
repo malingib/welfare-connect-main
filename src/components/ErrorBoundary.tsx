@@ -1,5 +1,4 @@
 import React, { ReactNode } from 'react';
-import * as Sentry from '@sentry/react';
 import { AlertCircle, RefreshCw, Home } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -69,17 +68,6 @@ export class ErrorBoundary extends React.Component<
           user: user ? JSON.parse(user) : null,
           path: typeof window !== 'undefined' ? window.location.pathname : null,
         },
-      });
-    } catch (e) {
-      // Ignore
-    }
-
-    // Report to Sentry
-    try {
-      Sentry.withScope((scope) => {
-        scope.setTag('boundary', 'UI_ERROR_BOUNDARY_TRIGGERED');
-        scope.setExtra('path', typeof window !== 'undefined' ? window.location.pathname : null);
-        Sentry.captureReactException(error, errorInfo);
       });
     } catch (e) {
       // Ignore

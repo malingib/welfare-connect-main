@@ -9,6 +9,46 @@ const MEMBER_SESSION_KEYS = [
   "member_login_time",
 ];
 
+export function getSupabaseBaseUrl(value: string | null | undefined = SUPABASE_URL): string {
+  const raw = typeof value === "string" ? value.trim() : "";
+  if (!raw) return "";
+
+  try {
+    const parsed = new URL(raw.replace(/\/+$/, ""));
+    const host = parsed.hostname.toLowerCase();
+    const isAllowedHost =
+      host === "localhost" ||
+      host === "127.0.0.1" ||
+      host === "[::1]" ||
+      host.endsWith(".supabase.co") ||
+      host.endsWith(".supabase.com");
+
+    return isAllowedHost ? parsed.origin : "";
+  } catch {
+    return "";
+  }
+}
+
+export function buildSupabaseFunctionUrl(functionName: string): string {
+  const baseUrl = getSupabaseBaseUrl();
+  if (!baseUrl) {
+    throw new Error(
+      "Supabase project URL is missing or invalid. Use the project URL such as https://<project-ref>.supabase.co, not the root dashboard URL."
+    );
+  }
+
+  const safeFunctionName = String(functionName ?? "")
+    .trim()
+    .replace(/^\/+/, "")
+    .replace(/\/+/, "/");
+
+  if (!safeFunctionName) {
+    throw new Error("Supabase function name is missing.");
+  }
+
+  return `${baseUrl}/functions/v1/${safeFunctionName}`;
+}
+
 export function getAppToken(): string | null {
   return localStorage.getItem(APP_TOKEN_KEY) || localStorage.getItem("token");
 }
@@ -118,11 +158,16 @@ export async function invokeWithAppToken<T = unknown>(
     throw new Error("Session expired. Please login again.");
   }
 
-  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-    throw new Error("Missing Supabase configuration.");
+  const baseUrl = getSupabaseBaseUrl(SUPABASE_URL);
+  if (!baseUrl || !SUPABASE_ANON_KEY) {
+    throw new Error(
+      "Missing or invalid Supabase configuration. Use the project URL like https://<project-ref>.supabase.co, not the root dashboard URL."
+    );
   }
 
-  const response = await fetch(`${SUPABASE_URL}/functions/v1/${functionName}`, {
+  const functionUrl = buildSupabaseFunctionUrl(functionName);
+
+  const response = await fetch(functionUrl, {
     method: "POST",
     credentials: "omit",
     headers: {

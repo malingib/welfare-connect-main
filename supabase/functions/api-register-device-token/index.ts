@@ -1,19 +1,19 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-import { corsHeaders } from "../_shared/cors.ts";
+import { corsFor } from "../_shared/cors.ts";
 import { verifyAppJwtFromRequest } from "../_shared/app_jwt.ts";
 
-function jsonResponse(status: number, payload: Record<string, unknown>) {
+function jsonResponse(req: Request, status: number, payload: Record<string, unknown>) {
   return new Response(JSON.stringify(payload), {
     status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
+    headers: { ...corsFor(req), "Content-Type": "application/json" },
   });
 }
 
 serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
-  if (req.method !== "POST") return jsonResponse(405, { error: "Method not allowed" });
+  if (req.method === "OPTIONS") return new Response("ok", { headers: corsFor(req) });
+  if (req.method !== "POST") return jsonResponse(req, 405, { error: "Method not allowed" });
 
   try {
     const claims = await verifyAppJwtFromRequest(req);
@@ -21,7 +21,7 @@ serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     const deviceToken = String(body?.device_token || "");
     const platform = String(body?.platform || "flutter");
-    if (!deviceToken) return jsonResponse(400, { error: "device_token is required" });
+    if (!deviceToken) return jsonResponse(req, 400, { error: "device_token is required" });
 
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
@@ -41,9 +41,9 @@ serve(async (req) => {
       }, { onConflict: "device_token" });
     if (error) throw error;
 
-    return jsonResponse(200, { success: true });
+    return jsonResponse(req, 200, { success: true });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Unauthorized";
-    return jsonResponse(401, { error: msg });
+    return jsonResponse(req, 401, { error: msg });
   }
 });

@@ -1,19 +1,19 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-import { corsHeaders } from "../_shared/cors.ts";
+import { corsFor } from "../_shared/cors.ts";
 import { requireFinanceRole, verifyAppJwtFromRequest } from "../_shared/app_jwt.ts";
 
-function jsonResponse(status: number, payload: Record<string, unknown>) {
+function jsonResponse(req: Request, status: number, payload: Record<string, unknown>) {
   return new Response(JSON.stringify(payload), {
     status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
+    headers: { ...corsFor(req), "Content-Type": "application/json" },
   });
 }
 
 serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
-  if (req.method !== "POST") return jsonResponse(405, { error: "Method not allowed" });
+  if (req.method === "OPTIONS") return new Response("ok", { headers: corsFor(req) });
+  if (req.method !== "POST") return jsonResponse(req, 405, { error: "Method not allowed" });
 
   try {
     const claims = await verifyAppJwtFromRequest(req);
@@ -23,7 +23,7 @@ serve(async (req) => {
     const memberId = String(body?.member_id || "");
     const caseId = body?.case_id ? String(body.case_id) : null;
     if (!suspenseId || !memberId) {
-      return jsonResponse(400, { error: "suspense_id and member_id required" });
+      return jsonResponse(req, 400, { error: "suspense_id and member_id required" });
     }
 
     const supabase = createClient(
@@ -38,7 +38,7 @@ serve(async (req) => {
       )
       .eq("id", suspenseId)
       .maybeSingle();
-    if (suspenseErr || !suspense) return jsonResponse(404, { error: "Suspense transaction not found" });
+    if (suspenseErr || !suspense) return jsonResponse(req, 404, { error: "Suspense transaction not found" });
 
     const targetCaseId = caseId || suspense.intended_case_id || null;
     const txType = targetCaseId ? "contribution" : "wallet_funding";
@@ -69,7 +69,7 @@ serve(async (req) => {
           .eq("id", suspenseId);
         if (updateErr) throw updateErr;
 
-        return jsonResponse(200, { success: true, deduplicated: true, existing_transaction_id: existingTx.id });
+        return jsonResponse(req, 200, { success: true, deduplicated: true, existing_transaction_id: existingTx.id });
       }
     }
 
@@ -104,9 +104,9 @@ serve(async (req) => {
       .eq("id", suspenseId);
     if (updateErr) throw updateErr;
 
-    return jsonResponse(200, { success: true });
+    return jsonResponse(req, 200, { success: true });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Unauthorized";
-    return jsonResponse(msg === "Forbidden" ? 403 : 401, { error: msg });
+    return jsonResponse(req, msg === "Forbidden" ? 403 : 401, { error: msg });
   }
 });

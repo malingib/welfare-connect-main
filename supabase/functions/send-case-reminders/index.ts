@@ -1,6 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { corsHeaders } from "../_shared/cors.ts";
+import { corsFor } from "../_shared/cors.ts";
 import { isSmsFailure, sendSmsMessage } from "../_shared/sms.ts";
 
 interface UnpaidCase {
@@ -18,7 +18,7 @@ interface MemberCase extends UnpaidCase {
 }
 
 serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+  if (req.method === "OPTIONS") return new Response("ok", { headers: corsFor(req) });
 
   try {
     const authHeader = req.headers.get("authorization") || "";
@@ -26,7 +26,7 @@ serve(async (req) => {
     if (expectedKey && authHeader !== `Bearer ${expectedKey}`) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...corsFor(req), "Content-Type": "application/json" },
       });
     }
 
@@ -48,7 +48,7 @@ serve(async (req) => {
     if (memberError) throw memberError;
     if (!members?.length) {
       return new Response(JSON.stringify({ sent: 0, message: "No eligible members" }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...corsFor(req), "Content-Type": "application/json" },
       });
     }
 
@@ -59,7 +59,7 @@ serve(async (req) => {
       const { data: tplRows } = await supabase
         .from("sms_templates")
         .select("trigger_key, raw_template")
-        .in("trigger_key", ["overdue_reminder", "case_due"]);
+        .in("trigger_key", ["overdue_reminder", "case_due", "closed_case_overdue"]);
       for (const row of (tplRows as Array<{ trigger_key: string; raw_template: string }> | null) || []) {
         const text = String(row?.raw_template || "").trim();
         if (row?.trigger_key && text) dbTemplates[row.trigger_key] = text;
@@ -67,6 +67,14 @@ serve(async (req) => {
     } catch {
       // Fall through to built-in defaults.
     }
+
+    // Reminder cadence per trigger (days). Closed-case debts are older and
+    // costlier to chase daily — remind every 3 days instead.
+    const TRIGGER_INTERVAL_DAYS: Record<string, number> = {
+      case_due: 1,
+      overdue_reminder: 1,
+      closed_case_overdue: 3,
+    };
 
     const sent: { member_id: string; case_number: string; trigger: string }[] = [];
 
@@ -86,7 +94,13 @@ serve(async (req) => {
         let triggerKey = "";
         let rawTemplate = "";
 
-        if (deadline < today) {
+        const caseStatus = String((ob as UnpaidCase).case_status || "").toLowerCase();
+        if (caseStatus === "closed") {
+          // Finalized case with outstanding balance: late-payment wording.
+          triggerKey = "closed_case_overdue";
+          rawTemplate = dbTemplates["closed_case_overdue"] ||
+            "Mwanachama mpendwa {name}, kesi {caseNumber} ilifungwa na hujalipa KES {amount}. Tafadhali lipa kama malipo ya kuchelewa kwa paybill 4164179 account {memberNumber}.";
+        } else if (deadline < today) {
           triggerKey = "overdue_reminder";
           rawTemplate = dbTemplates["overdue_reminder"] ||
             "Mwanachama mpendwa, malipo ya case {caseNumber} yamechelewa. Tafadhali lipa KES {amount} haraka iwezekanavyo.";
@@ -98,15 +112,19 @@ serve(async (req) => {
           continue;
         }
 
-        // Dedup: skip if reminder already sent today for this member+case
+        // Dedup: skip if this trigger already sent within its interval window
+        // for this member+case (per-day for active cases, 3-day for closed).
+        const intervalDays = TRIGGER_INTERVAL_DAYS[triggerKey] || 1;
+        const cutoff = new Date(Date.now() - (intervalDays - 1) * 86400000).toISOString().slice(0, 10);
         const { data: existing } = await supabase
           .from("audit_logs")
           .select("id")
           .eq("table_name", "sms")
           .eq("metadata->>source", "cron_case_reminder")
+          .eq("metadata->>trigger_key", triggerKey)
           .eq("metadata->>case_number", ob.case_number)
           .eq("metadata->>phone_number", phone)
-          .gte("created_at", today)
+          .gte("created_at", cutoff)
           .limit(1);
         if (existing?.length) continue;
 
@@ -162,10 +180,12 @@ serve(async (req) => {
           await supabase.from("notifications").insert({
             member_id: member.id,
             role: "member",
-            title: triggerKey === "overdue_reminder" ? "Malipo Yamechelewa" : "Malipo Yanakaribia",
+            title: triggerKey === "overdue_reminder" ? "Malipo Yamechelewa" : triggerKey === "closed_case_overdue" ? "Kesi Iliyofungwa" : "Malipo Yanakaribia",
             message: msg,
             category: triggerKey,
             data: { sms: true, phone, trigger_key: triggerKey, case_number: ob.case_number },
+            // SMS already delivered above — mark so the notification sweeper skips it.
+            sms_sent_at: new Date().toISOString(),
           });
 
           sent.push({ member_id: member.id, case_number: ob.case_number, trigger: triggerKey });
@@ -174,13 +194,13 @@ serve(async (req) => {
     }
 
     return new Response(JSON.stringify({ sent: sent.length, details: sent }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: { ...corsFor(req), "Content-Type": "application/json" },
     });
   } catch (e) {
     console.error("Error in send-case-reminders:", e);
     return new Response(JSON.stringify({ error: String(e) }), {
       status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: { ...corsFor(req), "Content-Type": "application/json" },
     });
   }
 });

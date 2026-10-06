@@ -1,18 +1,18 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { corsHeaders } from "../_shared/cors.ts";
+import { corsFor } from "../_shared/cors.ts";
 
-function jsonResponse(status: number, payload: Record<string, unknown>) {
+function jsonResponse(req: Request, status: number, payload: Record<string, unknown>) {
   return new Response(JSON.stringify(payload), {
     status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
+    headers: { ...corsFor(req), "Content-Type": "application/json" },
   });
 }
 
 serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
-  if (req.method !== "POST") return jsonResponse(405, { error: "Method not allowed" });
+  if (req.method === "OPTIONS") return new Response("ok", { headers: corsFor(req) });
+  if (req.method !== "POST") return jsonResponse(req, 405, { error: "Method not allowed" });
 
-  return jsonResponse(410, {
+  return jsonResponse(req, 410, {
     error: "Manual reinstatement checks have been retired. Wallet top-ups now apply the automatic payment waterfall.",
   });
 });

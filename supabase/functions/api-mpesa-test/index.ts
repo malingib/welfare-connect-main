@@ -1,12 +1,12 @@
 import { serve } from "https://deno.land/std@0.165.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { corsHeaders } from "../_shared/cors.ts";
+import { corsFor } from "../_shared/cors.ts";
 import { requirePrivilegedRole, verifyAppJwtFromRequest } from "../_shared/app_jwt.ts";
 
-function jsonResponse(status: number, payload: Record<string, unknown>) {
+function jsonResponse(req: Request, status: number, payload: Record<string, unknown>) {
   return new Response(JSON.stringify(payload), {
     status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
+    headers: { ...corsFor(req), "Content-Type": "application/json" },
   });
 }
 
@@ -22,11 +22,11 @@ function getErrorMessage(error: unknown): string {
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
+    return new Response("ok", { headers: corsFor(req) });
   }
 
   if (req.method !== "GET") {
-    return jsonResponse(405, { error: "Method not allowed" });
+    return jsonResponse(req, 405, { error: "Method not allowed" });
   }
 
   try {
@@ -48,7 +48,7 @@ serve(async (req) => {
     if (settingsError) throw settingsError;
 
     const hasKeys = !!(settings?.mpesa_consumer_key && settings?.mpesa_consumer_secret);
-    return jsonResponse(200, {
+    return jsonResponse(req, 200, {
       success: hasKeys,
       configured: hasKeys,
       env: settings?.mpesa_env ?? "sandbox",
@@ -56,6 +56,6 @@ serve(async (req) => {
   } catch (e) {
     const msg = getErrorMessage(e);
     const status = msg === "Forbidden" ? 403 : msg.toLowerCase().includes("token") ? 401 : 500;
-    return jsonResponse(status, { error: msg, success: false });
+    return jsonResponse(req, status, { error: msg, success: false });
   }
 });

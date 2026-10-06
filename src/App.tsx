@@ -3,7 +3,6 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Routes, Route, Navigate, useLocation } from "react-router-dom";
-import * as Sentry from "@sentry/react";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { identifyCurrentUser, trackPageview } from "@/lib/posthog";
 import ErrorBoundary from "@/components/ErrorBoundary";
@@ -58,8 +57,6 @@ const PageLoader = () => (
   </div>
 );
 
-const SentryRoutes = Sentry.withSentryReactRouterV6Routing(Routes);
-
 const PosthogRouteTracker = () => {
   const location = useLocation();
 
@@ -82,7 +79,7 @@ const App = () => (
         <Sonner />
         <PosthogRouteTracker />
         <Suspense fallback={<PageLoader />}>
-          <SentryRoutes>
+          <Routes>
           <Route path="/" element={<Index />} />
           <Route path="/login" element={<Login />} />
           <Route path="/admin/login" element={<Navigate to="/login" replace />} />
@@ -257,7 +254,7 @@ const App = () => (
           />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<Navigate to="/login" replace />} />
-        </SentryRoutes>
+        </Routes>
       </Suspense>
       </TooltipProvider>
     </AuthProvider>

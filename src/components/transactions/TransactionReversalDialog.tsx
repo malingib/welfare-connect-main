@@ -16,7 +16,7 @@ import { toast } from 'sonner'
 import { supabase } from '@/integrations/supabase/client'
 import type { Database } from '@/integrations/supabase/types'
 import { Transaction } from '@/lib/types'
-import { getAppToken } from '@/lib/appAuth'
+import { buildSupabaseFunctionUrl, getAppToken } from '@/lib/appAuth'
 
 interface TransactionReversalDialogProps {
   transaction: Transaction | null
@@ -72,12 +72,7 @@ export function TransactionReversalDialog({
           throw new Error('Session expired. Please login again.')
         }
 
-        const supabaseUrl = String(import.meta.env.VITE_SUPABASE_URL || '').trim().replace(/\/+$/, '')
-        if (!supabaseUrl) {
-          throw new Error('Supabase URL is not configured')
-        }
-
-        const endpoint = `${supabaseUrl}/functions/v1/mpesa-reversal`
+        const endpoint = buildSupabaseFunctionUrl('mpesa-reversal')
 
         const reversalResp = await fetch(endpoint, {
           method: 'POST',

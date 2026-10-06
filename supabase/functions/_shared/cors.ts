@@ -41,14 +41,17 @@ function isAllowedOrigin(origin: string, list: string[]): boolean {
   try {
     const url = new URL(o);
     const host = url.hostname.toLowerCase();
-    // All malangawelfare variants: apex, www, any subdomain, both TLDs
+    // All malangawelfare variants: apex, www, any subdomain, both TLDs,
+    // http or https. Auth is enforced by JWT (not by CORS), so plain-http
+    // first-party origins (devices without HSTS cache, http bookmarks)
+    // must not be blocked at the preflight stage.
     if (
       host === "malangawelfare.co.ke" ||
       host.endsWith(".malangawelfare.co.ke") ||
       host === "malangawelfare.org" ||
       host.endsWith(".malangawelfare.org")
     ) {
-      return url.protocol === "https:";
+      return true;
     }
     // Local dev on any port
     if (host === "localhost" || host === "127.0.0.1") return true;

@@ -1,11 +1,11 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { requireMemberManagementRole, verifyAppJwtFromRequest } from "../_shared/app_jwt.ts";
-import { corsHeaders } from "../_shared/cors.ts";
+import { corsFor } from "../_shared/cors.ts";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
+    return new Response("ok", { headers: corsFor(req) });
   }
 
   try {
@@ -17,7 +17,7 @@ serve(async (req) => {
     if (!caseId) {
       return new Response(JSON.stringify({ error: "case_id is required" }), {
         status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...corsFor(req), "Content-Type": "application/json" },
       });
     }
 
@@ -37,7 +37,7 @@ serve(async (req) => {
     if (caseErr || !caseRow) {
       return new Response(JSON.stringify({ error: "Case not found" }), {
         status: 404,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...corsFor(req), "Content-Type": "application/json" },
       });
     }
 
@@ -128,7 +128,7 @@ serve(async (req) => {
       }),
       {
         status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...corsFor(req), "Content-Type": "application/json" },
       },
     );
   } catch (error) {
@@ -140,7 +140,7 @@ serve(async (req) => {
       }),
       {
         status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...corsFor(req), "Content-Type": "application/json" },
       },
     );
   }

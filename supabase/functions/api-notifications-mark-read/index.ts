@@ -1,14 +1,14 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { corsHeaders } from "../_shared/cors.ts";
+import { corsFor } from "../_shared/cors.ts";
 import { verifyAppJwtFromRequest } from "../_shared/app_jwt.ts";
 
 serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+  if (req.method === "OPTIONS") return new Response("ok", { headers: corsFor(req) });
   if (req.method !== "POST") {
     return new Response(JSON.stringify({ error: "Method not allowed" }), {
       status: 405,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: { ...corsFor(req), "Content-Type": "application/json" },
     });
   }
 
@@ -21,7 +21,7 @@ serve(async (req) => {
     if (!notificationId && !markAll) {
       return new Response(JSON.stringify({ error: "Provide notification_id or mark_all=true" }), {
         status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...corsFor(req), "Content-Type": "application/json" },
       });
     }
 
@@ -50,13 +50,13 @@ serve(async (req) => {
     if (error) throw error;
 
     return new Response(JSON.stringify({ success: true }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: { ...corsFor(req), "Content-Type": "application/json" },
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Error";
     return new Response(JSON.stringify({ error: msg }), {
       status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: { ...corsFor(req), "Content-Type": "application/json" },
     });
   }
 });

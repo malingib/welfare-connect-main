@@ -1,12 +1,12 @@
 import { serve } from "https://deno.land/std@0.220.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { corsHeaders } from "../_shared/cors.ts";
+import { corsFor } from "../_shared/cors.ts";
 import { requirePrivilegedRole, verifyAppJwtFromRequest } from "../_shared/app_jwt.ts";
 
-function jsonResponse(status: number, payload: Record<string, unknown>) {
+function jsonResponse(req: Request, status: number, payload: Record<string, unknown>) {
   return new Response(JSON.stringify(payload), {
     status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
+    headers: { ...corsFor(req), "Content-Type": "application/json" },
   });
 }
 
@@ -23,8 +23,8 @@ function normalizePhone(phone: unknown): string | null {
 }
 
 serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
-  if (req.method !== "POST") return jsonResponse(405, { error: "Method not allowed" });
+  if (req.method === "OPTIONS") return new Response("ok", { headers: corsFor(req) });
+  if (req.method !== "POST") return jsonResponse(req, 405, { error: "Method not allowed" });
 
   try {
     const claims = await verifyAppJwtFromRequest(req);
@@ -34,7 +34,7 @@ serve(async (req) => {
     const members: unknown[] = Array.isArray(body.members) ? body.members : [];
 
     if (members.length === 0) {
-      return jsonResponse(400, { error: "No members provided" });
+      return jsonResponse(req, 400, { error: "No members provided" });
     }
 
     const supabase = createClient(
@@ -99,9 +99,9 @@ serve(async (req) => {
       results.processed++;
     }
 
-    return jsonResponse(200, results);
+    return jsonResponse(req, 200, results);
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Unauthorized";
-    return jsonResponse(msg === "Forbidden" ? 403 : 401, { error: msg });
+    return jsonResponse(req, msg === "Forbidden" ? 403 : 401, { error: msg });
   }
 });

@@ -1,13 +1,13 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { jwtVerify } from "https://esm.sh/jose@5.9.6";
-import { corsHeaders } from "../_shared/cors.ts";
+import { corsFor } from "../_shared/cors.ts";
 const FINANCE_ROLES = new Set(["super_admin", "treasurer"]);
 
-function jsonResponse(status: number, payload: Record<string, unknown>) {
+function jsonResponse(req: Request, status: number, payload: Record<string, unknown>) {
   return new Response(JSON.stringify(payload), {
     status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
+    headers: { ...corsFor(req), "Content-Type": "application/json" },
   });
 }
 
@@ -78,11 +78,11 @@ async function verifyToken(req: Request) {
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
+    return new Response("ok", { headers: corsFor(req) });
   }
 
   if (!["GET", "POST"].includes(req.method)) {
-    return jsonResponse(405, { error: "Method not allowed" });
+    return jsonResponse(req, 405, { error: "Method not allowed" });
   }
 
   try {
@@ -105,7 +105,7 @@ serve(async (req) => {
     );
 
     if (selectors.length === 0) {
-      return jsonResponse(400, { error: "member_id is required" });
+      return jsonResponse(req, 400, { error: "member_id is required" });
     }
 
     const page = Math.max(Number(url.searchParams.get("page") || body["page"] || 1), 1);
@@ -120,7 +120,7 @@ serve(async (req) => {
 
     const resolvedMemberId = await resolveMemberId(supabase, selectors);
     if (!resolvedMemberId) {
-      return jsonResponse(404, { error: "Member not found" });
+      return jsonResponse(req, 404, { error: "Member not found" });
     }
 
     const { data, error, count } = await supabase
@@ -134,7 +134,7 @@ serve(async (req) => {
       throw error;
     }
 
-    return jsonResponse(200, {
+    return jsonResponse(req, 200, {
       page,
       page_size: pageSize,
       total: count || 0,
@@ -144,7 +144,7 @@ serve(async (req) => {
   } catch (error) {
     console.error("api-member-transactions error:", error);
     const msg = error instanceof Error ? error.message : "Unauthorized or invalid request";
-    if (msg === "Forbidden") return jsonResponse(403, { error: msg });
-    return jsonResponse(401, { error: "Unauthorized or invalid request" });
+    if (msg === "Forbidden") return jsonResponse(req, 403, { error: msg });
+    return jsonResponse(req, 401, { error: "Unauthorized or invalid request" });
   }
 });

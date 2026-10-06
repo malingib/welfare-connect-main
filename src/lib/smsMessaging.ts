@@ -7,6 +7,12 @@ export type SmsTriggerKey =
   | 'overdue_reminder'
   | 'amount_due'
   | 'renewal_reminder'
+  | 'closed_case_overdue'
+  | 'probation_ending'
+  | 'probation_completed'
+  | 'penalty_posted'
+  | 'status_changed'
+  | 'auto_inactive'
   | 'manual_custom';
 
 export type SmsRecipient = {
@@ -147,6 +153,66 @@ export const smsTemplates: SmsTemplate[] = [
         deadline ? `Tafadhali lipa kabla ya ${deadline}.` : 'Tafadhali lipa kabla ya muda.',
       ].join(' '),
     rawTemplate: 'Malanga Welfare: Usajili wako unakaribia kufikia mwisho. Tafadhali lipa kabla ya {deadline}.',
+  },
+  {
+    key: 'closed_case_overdue',
+    label: 'Closed Case Overdue',
+    description: 'Follow up on unpaid balances for finalized (closed) cases.',
+    category: 'case',
+    message: ({ memberName, amount, caseNumber, memberNumber }) =>
+      [
+        `Mwanachama mpendwa ${memberName || 'mwanachama'}, kesi ${caseNumber || 'N/A'} ilifungwa na hujalipa KES ${amount || '0'}.`,
+        `Tafadhali lipa kama malipo ya kuchelewa kwa paybill 4164179 account ${memberNumber || 'N/A'}.`,
+      ].join(' '),
+    rawTemplate: 'Mwanachama mpendwa {name}, kesi {caseNumber} ilifungwa na hujalipa KES {amount}. Tafadhali lipa kama malipo ya kuchelewa kwa paybill 4164179 account {memberNumber}.',
+  },
+  {
+    key: 'probation_ending',
+    label: 'Probation Ending',
+    description: 'Notify members whose probation period ends soon.',
+    category: 'member',
+    message: ({ memberName, deadline }) =>
+      [
+        `Mwanachama mpendwa ${memberName || 'mwanachama'}, muda wako wa majaribio unaisha ${deadline || 'hivi karibuni'}.`,
+        'Endelea kuchangia ili uwe mwanachama kamili.',
+      ].join(' '),
+    rawTemplate: 'Mwanachama mpendwa {name}, muda wako wa majaribio unaisha {deadline}. Endelea kuchangia ili uwe mwanachama kamili.',
+  },
+  {
+    key: 'probation_completed',
+    label: 'Probation Completed',
+    description: 'Congratulate members who became full members.',
+    category: 'member',
+    message: ({ memberName }) =>
+      `Hongera ${memberName || 'mwanachama'}! Muda wako wa majaribio umeisha na sasa wewe ni mwanachama kamili wa Malanga Welfare.`,
+    rawTemplate: 'Hongera {name}! Muda wako wa majaribio umeisha na sasa wewe ni mwanachama kamili wa Malanga Welfare.',
+  },
+  {
+    key: 'penalty_posted',
+    label: 'Penalty Posted',
+    description: 'Notify members when a reinstatement penalty is posted.',
+    category: 'payment',
+    message: ({ memberName, amount }) =>
+      `Mwanachama mpendwa ${memberName || 'mwanachama'}, adhabu ya KES ${amount || '0'} imewekwa kwenye akaunti yako. Lipa kupitia paybill ili kuendelea kupata huduma.`,
+    rawTemplate: 'Mwanachama mpendwa {name}, adhabu ya KES {amount} imewekwa kwenye akaunti yako. Lipa kupitia paybill ili kuendelea kupata huduma.',
+  },
+  {
+    key: 'status_changed',
+    label: 'Status Changed',
+    description: 'Notify members when their membership status changes.',
+    category: 'member',
+    message: ({ memberName }) =>
+      `Mwanachama mpendwa ${memberName || 'mwanachama'}, hali yako ya uanachama imebadilika. Fungua programu kuona maelezo.`,
+    rawTemplate: 'Mwanachama mpendwa {name}, hali yako ya uanachama imebadilika kutoka {from} hadi {to}.',
+  },
+  {
+    key: 'auto_inactive',
+    label: 'Auto Inactive',
+    description: 'Notify members suspended for unpaid contributions.',
+    category: 'member',
+    message: ({ memberName }) =>
+      `Mwanachama mpendwa ${memberName || 'mwanachama'}, uanachama wako umesimamishwa kwa sababu ya malipo yanayodaiwa. Lipa kupitia paybill 4164179 ili kurejesha uanachama.`,
+    rawTemplate: 'Mwanachama mpendwa {name}, uanachama wako umesimamishwa kwa sababu ya malipo yanayodaiwa. Lipa kupitia paybill 4164179 ili kurejesha uanachama.',
   },
   {
     key: 'manual_custom',

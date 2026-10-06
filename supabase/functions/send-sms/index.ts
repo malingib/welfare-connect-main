@@ -1,6 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
-import { corsHeaders } from "../_shared/cors.ts"
+import { corsFor } from "../_shared/cors.ts";
 import { requirePrivilegedRole, verifyAppJwtFromRequest } from "../_shared/app_jwt.ts"
 import { isSmsFailure, isValidSmsPhoneNumber, sendSmsMessage, summarizeSmsFailure } from "../_shared/sms.ts"
 
@@ -166,7 +166,7 @@ function toRecipient(input: unknown): RecipientData | null {
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
+    return new Response('ok', { headers: corsFor(req) })
   }
 
   try {
@@ -189,7 +189,7 @@ serve(async (req) => {
     if (!rawRecipients.length || !message) {
       return new Response(
         JSON.stringify({ error: 'At least one recipient and a message are required' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 400, headers: { ...corsFor(req), 'Content-Type': 'application/json' } }
       );
     }
 
@@ -198,7 +198,7 @@ serve(async (req) => {
     if (!parsed.length) {
       return new Response(
         JSON.stringify({ error: 'At least one valid recipient phone number is required' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 400, headers: { ...corsFor(req), 'Content-Type': 'application/json' } }
       );
     }
 
@@ -332,7 +332,7 @@ serve(async (req) => {
       }),
       {
         status: success ? 200 : 502,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        headers: { ...corsFor(req), 'Content-Type': 'application/json' }
       }
     );
   } catch (error) {
@@ -345,7 +345,7 @@ serve(async (req) => {
       }),
       {
         status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        headers: { ...corsFor(req), 'Content-Type': 'application/json' }
       }
     );
   }

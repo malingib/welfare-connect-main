@@ -1,13 +1,13 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-import { corsHeaders } from "../_shared/cors.ts";
+import { corsFor } from "../_shared/cors.ts";
 import { verifyAppJwtFromRequest } from "../_shared/app_jwt.ts";
 
-function jsonResponse(status: number, payload: Record<string, unknown>) {
+function jsonResponse(req: Request, status: number, payload: Record<string, unknown>) {
   return new Response(JSON.stringify(payload), {
     status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
+    headers: { ...corsFor(req), "Content-Type": "application/json" },
   });
 }
 
@@ -36,8 +36,8 @@ function getErrorMessage(error: unknown): string {
 }
 
 serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
-  if (req.method !== "POST") return jsonResponse(405, { error: "Method not allowed" });
+  if (req.method === "OPTIONS") return new Response("ok", { headers: corsFor(req) });
+  if (req.method !== "POST") return jsonResponse(req, 405, { error: "Method not allowed" });
 
   try {
     const claims = await verifyAppJwtFromRequest(req);
@@ -66,10 +66,10 @@ serve(async (req) => {
 
     if (error) throw error;
 
-    return jsonResponse(200, { success: true });
+    return jsonResponse(req, 200, { success: true });
   } catch (e) {
     const msg = getErrorMessage(e);
     const status = msg === "Forbidden" ? 403 : msg.toLowerCase().includes("token") ? 401 : 500;
-    return jsonResponse(status, { error: msg });
+    return jsonResponse(req, status, { error: msg });
   }
 });

@@ -1,13 +1,13 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-import { corsHeaders } from "../_shared/cors.ts";
+import { corsFor } from "../_shared/cors.ts";
 import { requireFinanceRole, verifyAppJwtFromRequest } from "../_shared/app_jwt.ts";
 
-function jsonResponse(status: number, payload: Record<string, unknown>) {
+function jsonResponse(req: Request, status: number, payload: Record<string, unknown>) {
   return new Response(JSON.stringify(payload), {
     status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
+    headers: { ...corsFor(req), "Content-Type": "application/json" },
   });
 }
 
@@ -46,8 +46,8 @@ function mpesaErrorMessage(
 }
 
 serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
-  if (req.method !== "POST") return jsonResponse(405, { error: "Method not allowed" });
+  if (req.method === "OPTIONS") return new Response("ok", { headers: corsFor(req) });
+  if (req.method !== "POST") return jsonResponse(req, 405, { error: "Method not allowed" });
 
   try {
     const claims = await verifyAppJwtFromRequest(req);
@@ -61,7 +61,7 @@ serve(async (req) => {
       role === "member"
         ? String(claims.member_id || claims.sub || "")
         : String(body?.memberId || claims.member_id || "");
-    if (!memberId) return jsonResponse(400, { error: "memberId is required" });
+    if (!memberId) return jsonResponse(req, 400, { error: "memberId is required" });
 
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
@@ -102,7 +102,7 @@ serve(async (req) => {
     ).toLowerCase() === "production" ? "production" : "sandbox";
 
     if (!consumerKey || !consumerSecret || !passkey) {
-      return jsonResponse(500, {
+      return jsonResponse(req, 500, {
         error: "M-Pesa credentials are incomplete (need consumer key, consumer secret, and passkey in settings or Edge secrets)",
       });
     }
@@ -111,7 +111,7 @@ serve(async (req) => {
     const amount = Math.floor(Number(body?.amount || 0));
     const accountReference = String(body?.accountReference || `WELFARE-${memberId}`);
     const transactionDesc = String(body?.transactionDesc || "Welfare Society Payment");
-    if (!phone || amount <= 0) return jsonResponse(400, { error: "phone and positive amount required" });
+    if (!phone || amount <= 0) return jsonResponse(req, 400, { error: "phone and positive amount required" });
 
     const auth = btoa(`${consumerKey}:${consumerSecret}`);
     const tokenUrl = `${env === "production" ? "https://api.safaricom.co.ke" : "https://sandbox.safaricom.co.ke"}/oauth/v1/generate?grant_type=client_credentials&_=${Date.now()}`;
@@ -124,13 +124,13 @@ serve(async (req) => {
     );
     const tokenJson = await parseResponseBody(tokenResp);
     if (!tokenResp.ok) {
-      return jsonResponse(502, {
+      return jsonResponse(req, 502, {
         error: mpesaErrorMessage("Failed to get M-Pesa access token", tokenResp, tokenJson),
       });
     }
     const accessToken = String(tokenJson?.access_token || "");
     if (!accessToken) {
-      return jsonResponse(502, { error: "M-Pesa access token response did not include an access token" });
+      return jsonResponse(req, 502, { error: "M-Pesa access token response did not include an access token" });
     }
 
     const ts = new Date().toISOString().replace(/[-:T.Z]/g, "").slice(0, 14);
@@ -166,12 +166,12 @@ serve(async (req) => {
     );
     const stkJson = await parseResponseBody(stkResp);
     if (!stkResp.ok) {
-      return jsonResponse(502, {
+      return jsonResponse(req, 502, {
         error: mpesaErrorMessage("STK push failed", stkResp, stkJson),
       });
     }
     if (!stkJson?.CheckoutRequestID) {
-      return jsonResponse(502, { error: "M-Pesa STK response did not include a checkout request ID" });
+      return jsonResponse(req, 502, { error: "M-Pesa STK response did not include a checkout request ID" });
     }
 
     await supabase.from("transactions").insert({
@@ -192,13 +192,13 @@ serve(async (req) => {
       },
     });
 
-    return jsonResponse(200, stkJson);
+    return jsonResponse(req, 200, stkJson);
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Request failed";
     const lower = msg.toLowerCase();
 
     if (lower.includes("forbidden")) {
-      return jsonResponse(403, { error: msg });
+      return jsonResponse(req, 403, { error: msg });
     }
 
     if (
@@ -208,9 +208,9 @@ serve(async (req) => {
       lower.includes("signature verification") ||
       lower.includes("verification failed")
     ) {
-      return jsonResponse(401, { error: msg });
+      return jsonResponse(req, 401, { error: msg });
     }
 
-    return jsonResponse(500, { error: msg });
+    return jsonResponse(req, 500, { error: msg });
   }
 });

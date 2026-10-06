@@ -1,13 +1,13 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-import { corsHeaders } from "../_shared/cors.ts";
+import { corsFor } from "../_shared/cors.ts";
 import { requireMemberManagementRole, verifyAppJwtFromRequest } from "../_shared/app_jwt.ts";
 
-function jsonResponse(status: number, payload: Record<string, unknown>) {
+function jsonResponse(req: Request, status: number, payload: Record<string, unknown>) {
   return new Response(JSON.stringify(payload), {
     status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
+    headers: { ...corsFor(req), "Content-Type": "application/json" },
   });
 }
 
@@ -55,8 +55,8 @@ async function resolveMemberId(
 }
 
 serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
-  if (!["GET", "POST"].includes(req.method)) return jsonResponse(405, { error: "Method not allowed" });
+  if (req.method === "OPTIONS") return new Response("ok", { headers: corsFor(req) });
+  if (!["GET", "POST"].includes(req.method)) return jsonResponse(req, 405, { error: "Method not allowed" });
 
   try {
     const claims = await verifyAppJwtFromRequest(req);
@@ -97,7 +97,7 @@ serve(async (req) => {
         : null;
 
       if (!resolvedMemberId) {
-        return jsonResponse(404, { error: "Member not found" });
+        return jsonResponse(req, 404, { error: "Member not found" });
       }
 
       const ids = (cases || []).map((c: any) => c.id);
@@ -119,9 +119,9 @@ serve(async (req) => {
       paid: role === "member" ? paidCaseIds.has(String(c.id)) : null,
     }));
 
-    return jsonResponse(200, { cases: mapped });
+    return jsonResponse(req, 200, { cases: mapped });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Unauthorized";
-    return jsonResponse(msg === "Forbidden" ? 403 : 401, { error: msg });
+    return jsonResponse(req, msg === "Forbidden" ? 403 : 401, { error: msg });
   }
 });

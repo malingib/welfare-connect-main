@@ -37,7 +37,7 @@ import {
 } from '@/components/ui/select';
 import type { Database } from '@/integrations/supabase/types';
 import { persistentCache } from '@/lib/cache';
-import { auditStamp, getAppToken } from '@/lib/appAuth';
+import { auditStamp, buildSupabaseFunctionUrl, getAppToken } from '@/lib/appAuth';
 import { createReportFilename, exportRowsToCSV, exportRowsToXLSX } from '@/lib/reportExport';
 import { CASE_ROW_COLUMNS, MEMBER_DETAIL_COLUMNS } from '@/lib/supabaseSelectColumns';
 
@@ -1013,10 +1013,9 @@ const CaseDetails = () => {
           const appToken = getAppToken()
           if (!appToken) throw new Error('Session expired. Please login again.')
 
-          const supabaseUrl = String(import.meta.env.VITE_SUPABASE_URL || '').trim().replace(/\/+$/, '')
-          if (!supabaseUrl) throw new Error('Supabase URL is not configured')
+          const endpoint = buildSupabaseFunctionUrl('mpesa-b2c')
 
-          const b2cResp = await fetch(`${supabaseUrl}/functions/v1/mpesa-b2c`, {
+          const b2cResp = await fetch(endpoint, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'x-app-token': appToken },
             body: JSON.stringify({
