@@ -39,6 +39,7 @@ interface SettingsData {
   organization_name: string;
   organization_email: string | null;
   organization_phone: string | null;
+  whatsapp_group_link: string | null;
   member_id_start: number | null;
   case_id_start: number | null;
   mpesa_consumer_key: string | null;
@@ -92,6 +93,11 @@ const smsAlertEvents = [
   { key: 'registration_submitted', label: 'Registration submitted', description: 'A new membership application has been submitted.' },
   { key: 'registration_pending_review', label: 'Registration pending review', description: 'An application is waiting for Committee review.' },
   { key: 'registration_approved', label: 'Registration approved', description: 'An applicant has been approved and should pay the registration fee.' },
+  { key: 'registration_payment_pending', label: 'Registration payment pending', description: 'An approved applicant has not completed payment.' },
+  { key: 'registration_payment_received', label: 'Registration payment received', description: 'Payment was received and is awaiting administrator verification.' },
+  { key: 'registration_activated', label: 'Membership activated', description: 'Verified payment created the member account.' },
+  { key: 'registration_expired', label: 'Application expired', description: 'An unpaid or rejected application expired after one week.' },
+  { key: 'whatsapp_group_invite', label: 'WhatsApp group invitation', description: 'Send the group link separately after activation.' },
   { key: 'registration_rejected', label: 'Registration rejected', description: 'An application has been rejected.' },
   { key: 'payment_received', label: 'Payment received', description: 'A member payment has been received.' },
   { key: 'payment_failed', label: 'Payment failed or needs attention', description: 'A payment failed or could not be confirmed.' },
@@ -113,6 +119,7 @@ const settingsFormSchema = z.object({
   organization_name: z.string().min(1, 'Organization name is required'),
   organization_email: z.string().email().optional().or(z.literal('')),
   organization_phone: z.string().optional().or(z.literal('')),
+  whatsapp_group_link: z.string().url('Enter a valid WhatsApp group URL').optional().or(z.literal('')),
   member_id_start: z.coerce.number().min(1, 'Member ID start must be a positive number').optional(),
   case_id_start: z.coerce.number().min(1, 'Case ID start must be a positive number').optional(),
   mpesa_consumer_key: z.string().optional().or(z.literal('')),
@@ -163,6 +170,7 @@ const Settings = () => {
       organization_name: 'Welfare Society',
       organization_email: '',
       organization_phone: '',
+      whatsapp_group_link: '',
       member_id_start: 1,
       case_id_start: 1,
       mpesa_consumer_key: '',
@@ -217,6 +225,7 @@ const Settings = () => {
             organization_name: settings.organization_name,
             organization_email: settings.organization_email || '',
             organization_phone: settings.organization_phone || '',
+            whatsapp_group_link: settings.whatsapp_group_link || '',
             member_id_start: settings.member_id_start || 1,
             case_id_start: settings.case_id_start || 1,
             mpesa_consumer_key: '',
@@ -1022,6 +1031,33 @@ const Settings = () => {
                                 >
                                   <Edit className="h-4 w-4" />
                                 </Button>
+                              )}
+                            </div>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name="whatsapp_group_link"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Members WhatsApp Group Link</FormLabel>
+                            <div className="flex items-center gap-2">
+                              <FormControl>
+                                <Input
+                                  type="url"
+                                  placeholder="https://chat.whatsapp.com/..."
+                                  {...field}
+                                  readOnly={editingField !== 'whatsapp_group_link'}
+                                  className={editingField !== 'whatsapp_group_link' ? "bg-muted cursor-not-allowed" : ""}
+                                />
+                              </FormControl>
+                              {editingField === 'whatsapp_group_link' ? (
+                                <Button type="button" variant="ghost" size="icon" onClick={() => toggleEdit('whatsapp_group_link')}><X className="h-4 w-4" /></Button>
+                              ) : (
+                                <Button type="button" variant="ghost" size="icon" onClick={() => toggleEdit('whatsapp_group_link')}><Edit className="h-4 w-4" /></Button>
                               )}
                             </div>
                             <FormMessage />

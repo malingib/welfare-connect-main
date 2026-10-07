@@ -119,6 +119,22 @@ serve(async (req: Request): Promise<Response> => {
     let phoneMatchedMemberId: string | null = null
     let caseActive: boolean = false
     let caseContributionAmount: number | null = null
+    let membershipApplication: any = null
+
+    // Application payment codes are resolved before member numbers. An approved
+    // applicant is not a member yet, so routing this through members would lose
+    // the payment in suspense.
+    if (billRefNumber.trim()) {
+      const { data: application } = await supabase
+        .from('membership_applications')
+        .select('id, full_name, phone_number, status, payment_status, payment_code')
+        .eq('payment_code', billRefNumber.trim().toUpperCase())
+        .maybeSingle()
+      if (application?.status === 'payment_pending') {
+        membershipApplication = application
+        console.log('✅ Membership application resolved by payment code:', application.payment_code)
+      }
+    }
 
     // 1. Resolve member number if present in reference
     if (parsed.memberNumber) {
@@ -221,6 +237,69 @@ serve(async (req: Request): Promise<Response> => {
             existing_transaction_id: existingTxByReceipt.id,
             reference: billRefNumber || null,
           },
+        })
+      }
+    }
+
+    if (!existingTxByReceipt && membershipApplication && transAmount > 0 && hasMpesaReceipt) {
+      const { data: settings } = await supabase
+        .from('settings')
+        .select('registration_fee')
+        .limit(1)
+        .maybeSingle()
+      const expectedAmount = Number(settings?.registration_fee || 0)
+      if (expectedAmount > 0 && transAmount !== expectedAmount) {
+        console.warn('⚠️ Application payment amount mismatch; sending to suspense', { expectedAmount, transAmount })
+      } else {
+        const { error: applicationPaymentError } = await supabase
+          .from('membership_applications')
+          .update({
+            payment_status: 'received',
+            payment_received_at: new Date().toISOString(),
+            payment_receipt: normalizedTransID,
+            payment_amount: transAmount,
+            payment_phone_number: normalizedPhone || null,
+            payment_metadata: {
+              source: 'c2b_webhook',
+              bill_reference: billRefNumber,
+              sender_name: senderName,
+              transaction_date: transactionDate.toISOString(),
+              raw_callback: callback,
+            },
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', membershipApplication.id)
+          .eq('status', 'payment_pending')
+
+        if (applicationPaymentError) throw applicationPaymentError
+
+        await supabase.from('audit_logs').insert({
+          action: 'MEMBERSHIP_PAYMENT_RECEIVED',
+          table_name: 'membership_applications',
+          record_id: membershipApplication.id,
+          status: 'success',
+          new_values: { payment_code: billRefNumber, receipt: normalizedTransID, amount: transAmount },
+        })
+
+        try {
+          const { data: template } = await supabase
+            .from('sms_templates')
+            .select('raw_template')
+            .eq('trigger_key', 'registration_payment_received')
+            .maybeSingle()
+          const rawTemplate = String((template as { raw_template?: unknown } | null)?.raw_template || '').trim()
+          const message = (rawTemplate || 'Malanga Welfare: We have received payment for application code {paymentCode}. The Welfare Committee will verify it before activating your membership.')
+            .replaceAll('{paymentCode}', String(membershipApplication.payment_code || ''))
+          await sendSmsMessage(
+            [membershipApplication.phone_number],
+            message,
+          )
+        } catch (smsError) {
+          console.error('Application payment SMS failed:', smsError instanceof Error ? smsError.message : String(smsError))
+        }
+
+        return new Response(JSON.stringify({ ResultCode: 0, ResultDesc: 'Accepted' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         })
       }
     }

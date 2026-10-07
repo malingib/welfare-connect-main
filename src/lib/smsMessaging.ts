@@ -3,6 +3,11 @@ export type SmsTriggerKey =
   | 'registration_submitted'
   | 'registration_pending_review'
   | 'registration_approved'
+  | 'registration_payment_pending'
+  | 'registration_payment_received'
+  | 'registration_activated'
+  | 'registration_expired'
+  | 'whatsapp_group_invite'
   | 'registration_rejected'
   | 'case_opened'
   | 'case_closed'
@@ -25,6 +30,9 @@ export type SmsRecipient = {
   name?: string;
   phoneNumber: string;
   memberNumber?: string;
+  paymentCode?: string;
+  paybill?: string;
+  whatsappLink?: string;
   memberId?: string;
   residence?: string;
   status?: string;
@@ -39,6 +47,9 @@ export type SmsTemplateContext = {
   audienceCount: number;
   memberName?: string;
   memberNumber?: string;
+  paymentCode?: string;
+  paybill?: string;
+  whatsappLink?: string;
   caseNumber?: string;
   amount?: string;
   deadline?: string;
@@ -74,10 +85,50 @@ export const smsTemplates: SmsTemplate[] = [
   {
     key: 'registration_approved',
     label: 'Registration Approved',
-    description: 'Request registration-fee payment after approval.',
+    description: 'Notify an applicant that approval is complete and payment is pending.',
     category: 'payment',
-    message: ({ memberNumber }) => `Malanga Welfare: Your application has been approved. Pay the registration fee using reference ${memberNumber || 'provided'}.`,
-    rawTemplate: 'Malanga Welfare: Your application has been approved. Pay the registration fee using reference {memberNumber}.',
+    message: ({ paymentCode, paybill, amount, deadline }) => `Malanga Welfare: Your membership application has been approved. Pay KES ${amount || 'the registration fee'} via Paybill ${paybill || 'the stated Paybill'}, account ${paymentCode || 'the payment code'} by ${deadline || 'the stated deadline'}. Your member number will be issued after payment is verified.`,
+    rawTemplate: 'Malanga Welfare: Your membership application has been approved. Pay KES {amount} via Paybill {paybill}, account {paymentCode} by {deadline}. Your member number will be issued after payment is verified.',
+  },
+  {
+    key: 'registration_payment_pending',
+    label: 'Registration Payment Pending',
+    description: 'Remind an approved applicant that payment is still pending.',
+    category: 'registration',
+    message: ({ paymentCode, paybill, amount, deadline }) => `Malanga Welfare: Payment for your approved membership is still pending. Pay KES ${amount || 'the registration fee'} via Paybill ${paybill || 'the stated Paybill'}, account ${paymentCode || 'the payment code'} by ${deadline || 'the stated deadline'}.`,
+    rawTemplate: 'Malanga Welfare: Payment for your approved membership is still pending. Pay KES {amount} via Paybill {paybill}, account {paymentCode} by {deadline}.',
+  },
+  {
+    key: 'registration_payment_received',
+    label: 'Registration Payment Received',
+    description: 'Acknowledge receipt while activation is awaiting administrator verification.',
+    category: 'payment',
+    message: ({ paymentCode }) => `Malanga Welfare: We have received payment for application code ${paymentCode || 'provided'}. The Welfare Committee will verify it before activating your membership.`,
+    rawTemplate: 'Malanga Welfare: We have received payment for application code {paymentCode}. The Welfare Committee will verify it before activating your membership.',
+  },
+  {
+    key: 'registration_activated',
+    label: 'Membership Activated',
+    description: 'Send after payment is verified and the member is created.',
+    category: 'member',
+    message: ({ memberName, memberNumber }) => `Malanga Welfare: Congratulations${memberName ? ` ${memberName}` : ''}. Your membership is now active. Your member number is ${memberNumber || 'provided separately'}.`,
+    rawTemplate: 'Malanga Welfare: Congratulations {name}. Your membership is now active. Your member number is {memberNumber}.',
+  },
+  {
+    key: 'registration_expired',
+    label: 'Application Expired',
+    description: 'Notify an applicant when an unpaid or rejected application expires after one week.',
+    category: 'registration',
+    message: () => 'Malanga Welfare: Your membership application has expired after one week without completion. Please submit a new application or contact the Welfare Committee.',
+    rawTemplate: 'Malanga Welfare: Your membership application has expired after one week without completion. Please submit a new application or contact the Welfare Committee.',
+  },
+  {
+    key: 'whatsapp_group_invite',
+    label: 'WhatsApp Group Invitation',
+    description: 'Send separately after membership activation.',
+    category: 'member',
+    message: ({ whatsappLink }) => `Malanga Welfare: Join the members WhatsApp group here: ${whatsappLink || 'link to be provided'}. Please do not share this link publicly.`,
+    rawTemplate: 'Malanga Welfare: Join the members WhatsApp group here: {whatsappLink}. Please do not share this link publicly.',
   },
   {
     key: 'registration_rejected',

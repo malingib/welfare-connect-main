@@ -13,27 +13,41 @@ const normalizePhone = (value: unknown) => {
   return digits;
 };
 
-async function nextMemberNumber(supabase: ReturnType<typeof createClient>) {
-  const [{ data: settings }, { data: members }, { data: reservedApplications }] = await Promise.all([
-    supabase.from("settings").select("member_id_start").limit(1).maybeSingle(),
-    supabase.from("members").select("member_number"),
-    supabase.from("membership_applications").select("payment_reference").in("status", ["payment_pending", "activated"]),
-  ]);
-  const start = Math.max(Number(settings?.member_id_start || 1), 1);
-  const highest = [...(members || []).map((member) => member.member_number), ...(reservedApplications || []).map((application) => application.payment_reference)].reduce((max, value) => {
-    const raw = String(value || "").trim();
-    if (!/^\d+$/.test(raw)) return max;
-    return Math.max(max, Number(raw));
-  }, start - 1);
-  return String(highest + 1);
+function renderTemplate(template: string, values: Record<string, unknown>) {
+  return template.replace(/\{(\w+)\}/g, (_, key: string) => String(values[key] ?? ""));
+}
+
+async function notifyApplicant(
+  supabase: ReturnType<typeof createClient>,
+  phone: string,
+  triggerKey: string,
+  fallback: string,
+  values: Record<string, unknown> = {},
+) {
+  try {
+    const { data: template } = await supabase
+      .from("sms_templates")
+      .select("raw_template")
+      .eq("trigger_key", triggerKey)
+      .maybeSingle();
+    const rawTemplate = String((template as { raw_template?: unknown } | null)?.raw_template || "").trim();
+    await sendSmsMessage([phone], renderTemplate(rawTemplate || fallback, values));
+  } catch (error) {
+    console.error("application SMS failed", error);
+  }
+}
+
+async function generatePaymentCode(supabase: ReturnType<typeof createClient>) {
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const code = `REG-${crypto.randomUUID().replaceAll("-", "").slice(0, 8).toUpperCase()}`;
+    const { data } = await supabase.from("membership_applications").select("id").eq("payment_code", code).maybeSingle();
+    if (!data) return code;
+  }
+  throw new Error("Could not generate a unique payment code");
 }
 
 function response(origin: string | null, status: number, payload: Record<string, unknown>) {
   return new Response(JSON.stringify(payload), { status, headers: { ...originHeaders(origin), "Content-Type": "application/json" } });
-}
-
-async function notifyApplicant(phone: string, message: string) {
-  try { await sendSmsMessage([phone], message); } catch (error) { console.error("application SMS failed", error); }
 }
 
 serve(async (req) => {
@@ -59,14 +73,18 @@ serve(async (req) => {
       if (body.residence_status === "resident" && !body.village) return response(origin, 400, { error: "Select a Malanga village." });
       if (body.residence_status === "non_resident" && !body.current_location) return response(origin, 400, { error: "Enter your current residence/location." });
 
-      const { data: existing } = await supabase.from("membership_applications")
-        .select("id, status").eq("national_id_number", String(body.national_id_number).trim()).in("status", ["pending_review", "approved", "payment_pending"]).maybeSingle();
-      if (existing) return response(origin, 409, { error: "An application for this National ID is already under review or awaiting payment." });
+      const nationalId = String(body.national_id_number).trim();
+      const [{ data: existing }, { data: existingMember }] = await Promise.all([
+        supabase.from("membership_applications")
+          .select("id, status").eq("national_id_number", nationalId).in("status", ["pending_review", "approved", "payment_pending", "activated"]).maybeSingle(),
+        supabase.from("members").select("id").eq("national_id_number", nationalId).maybeSingle(),
+      ]);
+      if (existing || existingMember) return response(origin, 409, { error: "A membership application or member already exists for this National ID." });
 
       const reference = `APP-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
       const { data: application, error } = await supabase.from("membership_applications").insert({
         application_reference: reference,
-        full_name: String(body.full_name).trim(), national_id_number: String(body.national_id_number).trim(),
+        full_name: String(body.full_name).trim(), national_id_number: nationalId,
         date_of_birth: dob, gender: String(body.gender || "").trim(), phone_number: phone,
         alternative_phone_number: body.alternative_phone_number ? normalizePhone(body.alternative_phone_number) : null,
         email_address: body.email_address || null, residence_status: body.residence_status,
@@ -76,7 +94,7 @@ serve(async (req) => {
       }).select("id, application_reference, status, application_date").single();
       if (error) throw error;
 
-      await notifyApplicant(phone, `Malanga Welfare: Application ${reference} received successfully and is awaiting Welfare Committee review.`);
+      await notifyApplicant(supabase, phone, "registration_submitted", `Malanga Welfare: Application ${reference} received successfully and is awaiting Welfare Committee review.`, { reference });
       await supabase.from("notifications").insert({ role: "admin", title: "New Membership Application", message: `New membership application ${reference} is awaiting review.`, category: "registration_submitted", data: { application_id: application.id, application_reference: reference } });
       return response(origin, 200, { success: true, application });
     }
@@ -96,18 +114,25 @@ serve(async (req) => {
       if (!id || !["approve", "reject"].includes(decision)) return response(origin, 400, { error: "application_id and approve/reject decision are required" });
       const { data: application, error: loadError } = await supabase.from("membership_applications").select("*").eq("id", id).single();
       if (loadError || !application) return response(origin, 404, { error: "Application not found" });
+      if (application.status !== "pending_review") return response(origin, 400, { error: "Only applications pending review can be reviewed" });
       const approved = decision === "approve";
       const { data: settings } = await supabase.from("settings").select("registration_fee, paybill_number, mpesa_shortcode").limit(1).maybeSingle();
-      const paymentReference = approved ? await nextMemberNumber(supabase) : null;
+      const paymentCode = approved ? await generatePaymentCode(supabase) : null;
       const paybill = String(settings?.paybill_number || settings?.mpesa_shortcode || "").trim() || "not configured";
       const registrationFee = Number(settings?.registration_fee || 0);
-      const update = { status: approved ? "payment_pending" : "rejected", payment_status: approved ? "pending" : "not_required", payment_reference: paymentReference, reviewed_at: new Date().toISOString(), reviewed_by: String(claims.sub || ""), review_reason: String(body.reason || "").trim() || null, updated_at: new Date().toISOString() };
+      const paymentExpiresAt = approved ? new Date(Date.now() + 7 * 86400000).toISOString() : null;
+      const update = { status: approved ? "payment_pending" : "rejected", payment_status: approved ? "pending" : "not_required", payment_reference: null, payment_code: paymentCode, payment_expires_at: paymentExpiresAt, reviewed_at: new Date().toISOString(), reviewed_by: String(claims.sub || ""), review_reason: String(body.reason || "").trim() || null, updated_at: new Date().toISOString() };
       const { data: updated, error } = await supabase.from("membership_applications").update(update).eq("id", id).select("*").single();
       if (error) throw error;
       const message = approved
-        ? `Malanga Welfare: Application approved. Pay KES ${registrationFee} via Paybill ${paybill}, Account ${paymentReference}.`
+        ? `Malanga Welfare: Your membership application has been approved. Pay KES ${registrationFee} via Paybill ${paybill}, account ${paymentCode} within one week. Your member number will be issued after payment is verified.`
         : `Malanga Welfare: Your membership application was not approved. ${update.review_reason || "Please contact the Welfare Committee."}`;
-      await notifyApplicant(application.phone_number, message);
+      await notifyApplicant(supabase, application.phone_number, approved ? "registration_approved" : "registration_rejected", message, {
+        amount: registrationFee,
+        paybill,
+        paymentCode,
+        deadline: paymentExpiresAt ? paymentExpiresAt.slice(0, 10) : "",
+      });
       await supabase.from("notifications").insert({ role: "admin", title: approved ? "Application Approved" : "Application Rejected", message: `${application.application_reference} was ${approved ? "approved" : "rejected"}.`, category: approved ? "registration_approved" : "registration_rejected", data: { application_id: id } });
       return response(origin, 200, { success: true, application: updated });
     }
@@ -117,25 +142,21 @@ serve(async (req) => {
       const { data: application, error: loadError } = await supabase.from("membership_applications").select("*").eq("id", id).single();
       if (loadError || !application) return response(origin, 404, { error: "Application not found" });
       if (application.status !== "payment_pending") return response(origin, 400, { error: "Application is not awaiting payment" });
-      const { data: settings } = await supabase.from("settings").select("registration_fee").limit(1).maybeSingle();
-      const age = Math.floor((Date.now() - new Date(application.date_of_birth).getTime()) / 31557600000);
-      const probationEnd = new Date(Date.now() + (age <= 50 ? 90 : 180) * 86400000).toISOString().slice(0, 10);
-      const memberNumber = String(application.payment_reference || await nextMemberNumber(supabase));
-      const { data: memberResult, error: memberError } = await supabase.rpc("insert_member", {
-        p_member_number: memberNumber, p_name: application.full_name, p_gender: application.gender,
-        p_date_of_birth: application.date_of_birth, p_national_id_number: application.national_id_number,
-        p_phone_number: application.phone_number, p_email_address: application.email_address,
-        p_residence: application.residence_status === "resident" ? application.village : application.current_location,
-        p_next_of_kin: application.next_of_kin, p_wallet_balance: 0, p_is_active: true,
-        p_registration_date: new Date().toISOString().slice(0, 10), p_dependants: application.dependants,
-        p_pin: null, p_registration_fee: Number(settings?.registration_fee || 0), p_fee_paid: true,
-      });
+      if (!["received", "verified"].includes(String(application.payment_status)) || !application.payment_receipt) {
+        return response(origin, 400, { error: "No verified payment receipt is linked to this application" });
+      }
+      const { data: memberResult, error: memberError } = await supabase.rpc("activate_membership_application", { p_application_id: id });
       if (memberError || !memberResult?.success) throw memberError || new Error(memberResult?.message || "Member activation failed");
-      await supabase.from("members").update({ status: "probation", is_active: true, probation_end_date: probationEnd, dependants: application.dependants, updated_at: new Date().toISOString() }).eq("id", memberResult.id);
-      const { data: updated, error } = await supabase.from("membership_applications").update({ status: "activated", payment_status: "verified", activated_member_id: memberResult.id, activated_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq("id", id).select("*").single();
+      const { data: updated, error } = await supabase.from("membership_applications").select("*").eq("id", id).single();
       if (error) throw error;
-      await notifyApplicant(application.phone_number, `Malanga Welfare: Payment confirmed. You are now a member. Membership Number: ${memberNumber}. Probation ends ${probationEnd}.`);
-      return response(origin, 200, { success: true, application: updated, member_number: memberNumber, probation_end_date: probationEnd });
+      const { data: activatedMember } = await supabase.from("members").select("probation_end_date").eq("id", memberResult.id).maybeSingle();
+      await notifyApplicant(supabase, application.phone_number, "registration_activated", `Malanga Welfare: Your membership is now active. Your member number is ${memberResult.member_number}.`, { name: application.full_name, memberNumber: memberResult.member_number });
+      const { data: settings } = await supabase.from("settings").select("whatsapp_group_link").limit(1).maybeSingle();
+      const whatsappLink = String(settings?.whatsapp_group_link || Deno.env.get("WHATSAPP_GROUP_LINK") || "").trim();
+      if (whatsappLink) {
+        await notifyApplicant(supabase, application.phone_number, "whatsapp_group_invite", `Malanga Welfare: Join the members WhatsApp group here: ${whatsappLink}.`, { whatsappLink });
+      }
+      return response(origin, 200, { success: true, application: updated, member_number: memberResult.member_number, probation_end_date: activatedMember?.probation_end_date || null });
     }
 
     return response(origin, 400, { error: "Unsupported action" });

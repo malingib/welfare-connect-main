@@ -10,6 +10,7 @@ export interface SafeSettings {
   organization_name: string;
   organization_email: string | null;
   organization_phone: string | null;
+  whatsapp_group_link: string | null;
   member_id_start: number;
   case_id_start: number;
   mpesa_shortcode: string | null;
@@ -74,7 +75,7 @@ export async function fetchSafeSettings(): Promise<SafeSettings | null> {
     if (directReadAllowed) {
       const { data, error: dbError } = await (supabase as any)
         .from('settings')
-        .select('registration_fee, renewal_fee, penalty_amount, paybill_number, organization_name, organization_email, organization_phone, member_id_start, case_id_start, mpesa_shortcode, mpesa_initiator_name, mpesa_env')
+        .select('registration_fee, renewal_fee, penalty_amount, paybill_number, organization_name, organization_email, organization_phone, whatsapp_group_link, member_id_start, case_id_start, mpesa_shortcode, mpesa_initiator_name, mpesa_env')
         .limit(1)
         .maybeSingle();
 

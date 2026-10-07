@@ -8,6 +8,9 @@ type RecipientData = {
   phoneNumber: string;
   name?: string;
   memberNumber?: string;
+  paymentCode?: string;
+  paybill?: string;
+  whatsappLink?: string;
   memberId?: string;
   amount?: string;
   caseNumber?: string;
@@ -41,6 +44,9 @@ async function buildRecipientContext(
   const ctx: Record<string, string> = {
     name: recipient.name || 'Member',
     memberNumber: recipient.memberNumber || '',
+    paymentCode: String((recipient as RecipientData).paymentCode || ''),
+    paybill: String((recipient as RecipientData).paybill || ''),
+    whatsappLink: String((recipient as RecipientData).whatsappLink || ''),
     amount: recipient.amount || '',
     caseNumber: recipient.caseNumber || '',
     deadline: recipient.deadline || '',
@@ -151,6 +157,9 @@ function toRecipient(input: unknown): RecipientData | null {
       phoneNumber,
       name: String(obj.name || '').trim() || undefined,
       memberNumber: String(obj.memberNumber || obj.member_number || '').trim() || undefined,
+      paymentCode: String(obj.paymentCode || obj.payment_code || '').trim() || undefined,
+      paybill: String(obj.paybill || '').trim() || undefined,
+      whatsappLink: String(obj.whatsappLink || obj.whatsapp_link || '').trim() || undefined,
       memberId: String(obj.memberId || obj.member_id || obj.id || '').trim() || undefined,
       amount: String(obj.amount || '').trim() || undefined,
       caseNumber: String(obj.caseNumber || obj.case_number || '').trim() || undefined,
