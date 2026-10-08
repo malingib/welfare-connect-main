@@ -11,6 +11,7 @@ const WALLET_DEBIT_TYPES = new Set([
 const WALLET_NEUTRAL_TYPES = new Set([
   "reversal_memo",
   "contribution",
+  "registration_payment",
 ]);
 
 /**
@@ -30,4 +31,3 @@ export function walletRowDelta(
   if (WALLET_DEBIT_TYPES.has(txType)) return -Math.abs(txAmount);
   return txAmount;
 }
-

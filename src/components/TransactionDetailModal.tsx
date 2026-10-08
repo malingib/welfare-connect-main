@@ -89,6 +89,7 @@ const TransactionDetailModal = ({ transaction, isOpen, onClose }: TransactionDet
       case 'disbursement':
         return <ArrowDownLeft className="h-6 w-6 text-red-500" />;
       case 'registration':
+      case 'registration_payment':
         return <UserPlus className="h-6 w-6 text-blue-500" />;
       case 'renewal':
         return <RefreshCw className="h-6 w-6 text-purple-500" />;
@@ -108,6 +109,7 @@ const TransactionDetailModal = ({ transaction, isOpen, onClose }: TransactionDet
       case 'disbursement':
         return 'Case Disbursement';
       case 'registration':
+      case 'registration_payment':
         return 'Registration Fee';
       case 'renewal':
         return 'Annual Renewal';
@@ -127,6 +129,7 @@ const TransactionDetailModal = ({ transaction, isOpen, onClose }: TransactionDet
       case 'disbursement':
         return 'bg-red-100 text-red-800';
       case 'registration':
+      case 'registration_payment':
         return 'bg-blue-100 text-blue-800';
       case 'renewal':
         return 'bg-purple-100 text-purple-800';

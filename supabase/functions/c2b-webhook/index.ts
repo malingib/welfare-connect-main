@@ -281,6 +281,23 @@ serve(async (req: Request): Promise<Response> => {
           new_values: { payment_code: billRefNumber, receipt: normalizedTransID, amount: transAmount },
         })
 
+        const { error: notificationError } = await supabase.from('notifications').insert({
+          role: 'admin',
+          title: 'New Member Registration Payment',
+          message: `Registration payment of KES ${transAmount.toLocaleString('en-KE')} received for ${membershipApplication.full_name} (${membershipApplication.payment_code}). Receipt: ${normalizedTransID}.`,
+          category: 'registration_payment_received',
+          data: {
+            source: 'c2b_webhook',
+            application_id: membershipApplication.id,
+            payment_code: membershipApplication.payment_code,
+            amount: transAmount,
+            receipt: normalizedTransID,
+          },
+        })
+        if (notificationError) {
+          console.error('Could not queue registration payment admin alert:', notificationError.message)
+        }
+
         try {
           const { data: template } = await supabase
             .from('sms_templates')
@@ -290,10 +307,21 @@ serve(async (req: Request): Promise<Response> => {
           const rawTemplate = String((template as { raw_template?: unknown } | null)?.raw_template || '').trim()
           const message = (rawTemplate || 'Malanga Welfare: We have received payment for application code {paymentCode}. The Welfare Committee will verify it before activating your membership.')
             .replaceAll('{paymentCode}', String(membershipApplication.payment_code || ''))
-          await sendSmsMessage(
-            [membershipApplication.phone_number],
-            message,
-          )
+          const results = await sendSmsMessage([membershipApplication.phone_number], message)
+          await Promise.all(results.map((result) => supabase.from('audit_logs').insert({
+            action: isSmsFailure(result) ? 'SMS_FAILED' : 'SMS_SENT',
+            table_name: 'sms',
+            status: isSmsFailure(result) ? 'error' : 'success',
+            metadata: {
+              source: 'c2b_webhook',
+              trigger_key: 'registration_payment_received',
+              phone_number: result.phoneNumber,
+              provider: result.provider,
+              provider_message_id: result.providerMessageId,
+              provider_response: result.raw,
+              application_id: membershipApplication.id,
+            },
+          })))
         } catch (smsError) {
           console.error('Application payment SMS failed:', smsError instanceof Error ? smsError.message : String(smsError))
         }

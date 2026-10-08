@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 
 import '../../core/constants/app_constants.dart';
 import '../../core/services/live_data_service.dart';
+import '../../core/widgets/async_error_view.dart';
 import '../auth/auth_controller.dart';
 import 'member_shell.dart';
 
@@ -64,7 +65,7 @@ class _CasesScreenState extends ConsumerState<CasesScreen> {
             return const Center(child: CircularProgressIndicator());
           }
           if (snapshot.hasError) {
-            return Center(child: Text(snapshot.error.toString()));
+            return AsyncErrorView(error: snapshot.error, onRetry: () => setState(() => _future = _load()));
           }
 
           final cases = snapshot.data ?? const <MemberCaseSnapshot>[];

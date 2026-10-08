@@ -27,6 +27,7 @@ import '../../features/member/report_screen.dart';
 import '../../features/member/dependants_screen.dart';
 import '../../features/auth/auth_controller.dart';
 import '../auth/role_access.dart';
+import '../utils/error_message.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
   final authState = ref.watch(authControllerProvider);
@@ -140,7 +141,7 @@ final routerProvider = Provider<GoRouter>((ref) {
             Text('Page not found',
                 style: Theme.of(context).textTheme.headlineMedium),
             const SizedBox(height: 8),
-            Text(state.error?.toString() ?? 'Unknown error'),
+            Text(userFacingError(state.error), textAlign: TextAlign.center),
             const SizedBox(height: 16),
             ElevatedButton(
               onPressed: () => context.go(

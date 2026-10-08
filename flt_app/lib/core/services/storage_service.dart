@@ -14,6 +14,7 @@ class StorageService {
   static const String _keyIsAdmin = 'is_admin';
   static const String _keyMemberId = 'member_id';
   static const String _keyMemberName = 'member_name';
+  static const String _keyRememberMe = 'remember_me';
 
   Future<void> saveAuthToken(String token) async {
     await _storage.write(key: _keyAuthToken, value: token);
@@ -62,6 +63,15 @@ class StorageService {
 
   Future<String?> getMemberName() async {
     return await _storage.read(key: _keyMemberName);
+  }
+
+  Future<void> saveRememberMe(bool value) async {
+    await _storage.write(key: _keyRememberMe, value: value ? 'true' : 'false');
+  }
+
+  Future<bool> getRememberMe() async {
+    // Existing installs predate this preference; preserve their saved session.
+    return (await _storage.read(key: _keyRememberMe)) != 'false';
   }
 
   Future<void> clearAll() async {

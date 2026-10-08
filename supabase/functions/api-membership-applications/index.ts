@@ -150,12 +150,30 @@ serve(async (req) => {
       const { data: updated, error } = await supabase.from("membership_applications").select("*").eq("id", id).single();
       if (error) throw error;
       const { data: activatedMember } = await supabase.from("members").select("probation_end_date").eq("id", memberResult.id).maybeSingle();
-      await notifyApplicant(supabase, application.phone_number, "registration_activated", `Malanga Welfare: Your membership is now active. Your member number is ${memberResult.member_number}.`, { name: application.full_name, memberNumber: memberResult.member_number });
-      const { data: settings } = await supabase.from("settings").select("whatsapp_group_link").limit(1).maybeSingle();
-      const whatsappLink = String(settings?.whatsapp_group_link || Deno.env.get("WHATSAPP_GROUP_LINK") || "").trim();
-      if (whatsappLink) {
-        await notifyApplicant(supabase, application.phone_number, "whatsapp_group_invite", `Malanga Welfare: Join the members WhatsApp group here: ${whatsappLink}.`, { whatsappLink });
-      }
+      const { data: activationTemplate } = await supabase.from("sms_templates").select("raw_template").eq("trigger_key", "registration_activated").maybeSingle();
+      const activationMessage = renderTemplate(
+        String(activationTemplate?.raw_template || "Malanga Welfare: Congratulations {name}. Your membership is now active. Your member number is {memberNumber}."),
+        { name: application.full_name, memberNumber: memberResult.member_number },
+      );
+      const { error: activationNotificationError } = await supabase.from("notifications").insert({
+        member_id: memberResult.id,
+        role: "member",
+        title: "Membership Activated",
+        message: activationMessage,
+        category: "registration_activated",
+        data: { source: "membership_application", application_id: id },
+      });
+      if (activationNotificationError) console.error("Could not queue membership activation SMS:", activationNotificationError.message);
+
+      const { error: whatsappNotificationError } = await supabase.from("notifications").insert({
+        member_id: memberResult.id,
+        role: "member",
+        title: "Members WhatsApp Group Invitation",
+        message: "Your members WhatsApp group invitation is ready.",
+        category: "whatsapp_group_invite",
+        data: { source: "membership_application", application_id: id, use_current_whatsapp_group_link: true },
+      });
+      if (whatsappNotificationError) console.error("Could not queue WhatsApp group invitation:", whatsappNotificationError.message);
       return response(origin, 200, { success: true, application: updated, member_number: memberResult.member_number, probation_end_date: activatedMember?.probation_end_date || null });
     }
 

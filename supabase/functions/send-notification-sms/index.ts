@@ -18,6 +18,7 @@ const SWEPT_CATEGORIES = [
   "registration_approved",
   "registration_payment_pending",
   "registration_payment_received",
+  "payment_received",
   "registration_activated",
   "registration_expired",
   "whatsapp_group_invite",
@@ -38,28 +39,20 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsFor(req) });
 
   try {
-    const authHeader = req.headers.get("authorization") || "";
-    const expectedKey = Deno.env.get("CRON_SECRET");
-    if (expectedKey && authHeader !== `Bearer ${expectedKey}`) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsFor(req), "Content-Type": "application/json" },
-      });
-    }
-
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
     );
 
     const cutoff = new Date(Date.now() - SWEEP_WINDOW_HOURS * 3600000).toISOString();
+    const invitationCutoff = new Date(Date.now() - 30 * 24 * 3600000).toISOString();
 
     const { data: pending, error: pendingError } = await supabase
       .from("notifications")
-      .select("id, member_id, title, message, category")
+      .select("id, member_id, title, message, category, data")
       .is("sms_sent_at", null)
       .in("category", SWEPT_CATEGORIES)
-      .gte("created_at", cutoff)
+      .or(`created_at.gte.${cutoff},and(category.eq.whatsapp_group_invite,created_at.gte.${invitationCutoff})`)
       .order("created_at", { ascending: true })
       .limit(500);
 
@@ -70,7 +63,7 @@ serve(async (req) => {
       });
     }
 
-    const memberIds = [...new Set(pending.map((n) => String(n.member_id)).filter(Boolean))];
+    const memberIds = [...new Set(pending.map((n) => String(n.member_id || "")).filter(Boolean))];
     const phoneByMember = new Map<string, string>();
     if (memberIds.length) {
       const { data: members } = await supabase
@@ -118,20 +111,50 @@ serve(async (req) => {
     let failed = 0;
     let skipped = 0;
 
-    for (const n of pending as Array<{ id: string; member_id: string; message: string; category: string }>) {
-      const phone = phoneByMember.get(String(n.member_id)) || "";
-      const adminPhones = [...new Set((adminIdsByTrigger.get(n.category) || [])
+    for (const n of pending as Array<{ id: string; member_id: string | null; message: string; category: string; data: Record<string, unknown> | null }>) {
+      const phone = phoneByMember.get(String(n.member_id || "")) || String(n.data?.phone_number || "").trim();
+      let message = String(n.message || "");
+      if (n.category === "registration_activated") {
+        const { data: member } = n.member_id
+          ? await supabase.from("members").select("name, member_number, phone_number").eq("id", n.member_id).maybeSingle()
+          : { data: null };
+        const { data: template } = await supabase.from("sms_templates").select("raw_template").eq("trigger_key", "registration_activated").maybeSingle();
+        const activationTemplate = String(template?.raw_template || "Malanga Welfare: Congratulations {name}. Your membership is active. Member number: {memberNumber}. Log in at https://malangawelfare.org/login?role=member using member number and your registered phone number.");
+        message = activationTemplate
+          .replaceAll("{name}", String(member?.name || "member"))
+          .replaceAll("{memberNumber}", String(member?.member_number || ""))
+          .replaceAll("{phoneNumber}", String(member?.phone_number || phone))
+          .replaceAll("{portalLink}", "https://malangawelfare.org/login?role=member");
+      }
+      if (n.category === "whatsapp_group_invite" && n.data?.use_current_whatsapp_group_link === true) {
+        const { data: settings } = await supabase.from("settings").select("whatsapp_group_link").limit(1).maybeSingle();
+        const whatsappLink = String(settings?.whatsapp_group_link || Deno.env.get("WHATSAPP_GROUP_LINK") || "").trim();
+        if (!whatsappLink) {
+          skipped += 1;
+          continue;
+        }
+        const { data: template } = await supabase.from("sms_templates").select("raw_template").eq("trigger_key", "whatsapp_group_invite").maybeSingle();
+        message = String(template?.raw_template || "Malanga Welfare: Join the members WhatsApp group here: {whatsappLink}. Please do not share this link publicly.")
+          .replaceAll("{whatsappLink}", whatsappLink);
+      }
+      const routedAdminIds = n.category === "registration_payment_received"
+        ? [...new Set([
+          ...(adminIdsByTrigger.get("registration_payment_received") || []),
+          ...(adminIdsByTrigger.get("payment_received") || []),
+        ])]
+        : (adminIdsByTrigger.get(n.category) || []);
+      const adminPhones = [...new Set(routedAdminIds
         .map((adminId) => adminPhoneById.get(adminId) || "")
         .filter(Boolean))];
 
       try {
-        let smsOk = !phone;
+        let smsOk = false;
         let result: SmsSendResult | null = null;
         if (phone) {
-          const results = await sendSmsMessage([phone], String(n.message || ""));
+          const results = await sendSmsMessage([phone], message);
           result = results[0];
           smsOk = Boolean(result && !isSmsFailure(result));
-        } else {
+        } else if (adminPhones.length === 0) {
           skipped += 1;
         }
 
@@ -144,7 +167,7 @@ serve(async (req) => {
             source: "notification_sweeper",
             trigger_key: n.category,
             phone_number: phone,
-            message: n.message,
+            message,
             member_id: n.member_id,
             notification_id: n.id,
             provider_message_id: result?.providerMessageId || null,
@@ -153,7 +176,7 @@ serve(async (req) => {
 
         let adminSent = 0;
         for (const adminPhone of adminPhones) {
-          const adminResults = await sendSmsMessage([adminPhone], `[Admin alert] ${String(n.message || "")}`);
+          const adminResults = await sendSmsMessage([adminPhone], `[Admin alert] ${message}`);
           const adminResult = adminResults[0];
           const adminOk = Boolean(adminResult && !isSmsFailure(adminResult));
           await supabase.from("audit_logs").insert({
@@ -165,7 +188,7 @@ serve(async (req) => {
               source: "notification_admin_routing",
               trigger_key: n.category,
               phone_number: adminPhone,
-              message: n.message,
+              message,
               member_id: n.member_id,
               notification_id: n.id,
               recipient_type: "admin",

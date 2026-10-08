@@ -35,6 +35,7 @@ const TransactionItem = ({ transaction, onClick, renderAction }: {
       case 'disbursement':
         return <ArrowDownLeft className="h-4 w-4 text-red-500" />;
       case 'registration':
+      case 'registration_payment':
         return <UserPlus className="h-4 w-4 text-blue-500" />;
       case 'renewal':
         return <RefreshCw className="h-4 w-4 text-purple-500" />;
@@ -52,6 +53,7 @@ const TransactionItem = ({ transaction, onClick, renderAction }: {
       case 'contribution': return 'Case Contribution';
       case 'disbursement': return 'Case Disbursement';
       case 'registration': return 'Registration Fee';
+      case 'registration_payment': return 'Registration Fee (Paid)';
       case 'renewal': return 'Annual Renewal';
       case 'penalty': return 'Penalty Payment';
       case 'wallet_funding': return 'Wallet Funding';

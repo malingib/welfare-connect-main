@@ -263,85 +263,12 @@ class LiveDataService {
 
   Future<List<MemberCaseSnapshot>> fetchPayableCases({
     required String memberId,
+    required String appToken,
   }) async {
-    final memberResp = await _client
-        .from('members')
-        .select('status')
-        .eq('id', memberId)
-        .maybeSingle();
-    final memberStatus =
-        ((memberResp as Map?)?['status'] ?? '').toString().toLowerCase().trim();
-    if (memberStatus != 'active' && memberStatus != 'probation') {
-      return const [];
-    }
-
-    final rows = await _client
-        .from('cases')
-        .select(
-            'id, case_number, case_type, contribution_per_member, is_active, is_finalized')
-        .or('is_active.eq.true,is_finalized.eq.true');
-    final raw = (rows as List)
-        .whereType<Map>()
-        .map((e) => e.cast<String, dynamic>())
-        .toList();
-
-    if (raw.isEmpty) return const [];
-
-    final caseIds = raw.map((r) => '${r['id']}').toList();
-    final existing = await _client
-        .from('transactions')
-        .select('case_id, status, amount, transaction_type')
-        .eq('member_id', memberId)
-        .inFilter('case_id', caseIds)
-        .inFilter('transaction_type', [
-      'contribution',
-      'case_wallet_deduction',
-      'arrears',
-      'contribution_refund',
-      'case_wallet_refund',
-    ]);
-
-    final paidByCase = <String, double>{};
-    for (final row in (existing as List).whereType<Map>()) {
-      final status = (row['status'] ?? '').toString();
-      if (status.isNotEmpty && status != 'completed') continue;
-      final caseId = (row['case_id'] ?? '').toString();
-      if (caseId.isEmpty) continue;
-      final txType = (row['transaction_type'] ?? '').toString();
-      final txAmount = _toDouble(row['amount']).abs();
-      final current = paidByCase[caseId] ?? 0;
-      if (txType == 'contribution' ||
-          txType == 'case_wallet_deduction' ||
-          txType == 'arrears') {
-        paidByCase[caseId] = current + txAmount;
-      } else if (txType == 'contribution_refund' ||
-          txType == 'case_wallet_refund') {
-        paidByCase[caseId] = current - txAmount;
-      }
-    }
-
-    final mapped = raw.map((r) {
-      final caseId = (r['id'] ?? '').toString();
-      final required = _toDouble(r['contribution_per_member']);
-      final netPaid =
-          (paidByCase[caseId] ?? 0).clamp(0, double.infinity).toDouble();
-      return MemberCaseSnapshot(
-        id: caseId,
-        caseNumber: (r['case_number'] ?? 'N/A').toString(),
-        caseType: (r['case_type'] ?? 'unknown').toString(),
-        contributionPerMember: required,
-        amountPaid: netPaid,
-        remainingAmount:
-            (required - netPaid).clamp(0, double.infinity).toDouble(),
-        progress:
-            required <= 0 ? 0 : (netPaid / required).clamp(0.0, 1.0).toDouble(),
-        isFinalized: r['is_finalized'] == true,
-        paid: netPaid >= required && required > 0,
-      );
-    }).toList();
-
-    mapped.sort((a, b) => a.caseNumber.compareTo(b.caseNumber));
-    return mapped;
+    // The member summary function applies registration-date eligibility and
+    // server-side authorization. Do not rebuild that policy with public table
+    // reads in the client.
+    return fetchMemberCases(memberId: memberId, appToken: appToken);
   }
 
   Future<List<Map<String, dynamic>>> fetchMemberTransactions({

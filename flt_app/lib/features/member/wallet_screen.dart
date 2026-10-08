@@ -6,6 +6,7 @@ import 'package:posthog_flutter/posthog_flutter.dart';
 
 import '../../core/constants/app_constants.dart';
 import '../../core/services/live_data_service.dart';
+import '../../core/widgets/async_error_view.dart';
 import '../auth/auth_controller.dart';
 import 'member_shell.dart';
 
@@ -64,7 +65,7 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
             return const Center(child: CircularProgressIndicator());
           }
           if (snapshot.hasError) {
-            return Center(child: Text(snapshot.error.toString()));
+            return AsyncErrorView(error: snapshot.error, onRetry: () => setState(() => _future = _load()));
           }
 
           final data = snapshot.data!;
@@ -298,6 +299,7 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
 
     final cases = await _service.fetchPayableCases(
       memberId: auth.memberId!,
+      appToken: auth.appToken!,
     );
     final pending = cases.where((c) => !c.paid).toList();
     if (!mounted) return;

@@ -35,6 +35,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             memberNumber: _identifierController.text.trim(),
             phoneNumber: _secretController.text.trim(),
             isAdmin: !_isMemberPortal,
+            rememberMe: _rememberMe,
           );
     }
   }
