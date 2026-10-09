@@ -21,3 +21,17 @@ test('public homepage buttons and page navigation work', async ({ page }) => {
   await expect(page).toHaveURL(/\/login\?role=member$/);
   await expect(page.getByRole('button', { name: 'Member' })).toBeVisible();
 });
+
+test('homepage links to the official Android app download', async ({ page }) => {
+  await page.goto('/');
+
+  await page.getByRole('button', { name: 'Download the App' }).click();
+  await expect(page).toHaveURL(/\/download$/);
+  await expect(
+    page.getByRole('heading', { name: 'Malanga Welfare, wherever you are.' }),
+  ).toBeVisible();
+
+  const download = page.getByRole('link', { name: 'Download for Android' });
+  await expect(download).toHaveAttribute('href', '/malanga-welfare.apk');
+  await expect(download).toHaveAttribute('download', 'malanga-welfare.apk');
+});

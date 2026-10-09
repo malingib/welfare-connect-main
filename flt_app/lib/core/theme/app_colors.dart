@@ -93,3 +93,9 @@ final ColorScheme lightColorScheme = ColorScheme(
   outlineVariant: AppColors.outlineVariant,
   surfaceTint: AppColors.surfaceTint,
 );
+
+final ColorScheme darkColorScheme = ColorScheme.fromSeed(
+  seedColor: AppColors.primaryFixedDim,
+  brightness: Brightness.dark,
+  surface: const Color(0xFF151B15),
+);

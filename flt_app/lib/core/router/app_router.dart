@@ -17,6 +17,7 @@ import '../../features/admin/admin_case_details_screen.dart';
 import '../../features/admin/admin_accounts_screen.dart';
 import '../../features/admin/admin_fiscal_reports_screen.dart';
 import '../../features/admin/admin_compliance_reports_screen.dart';
+import '../../features/admin/admin_applications_screen.dart';
 import '../../features/member/wallet_screen.dart';
 import '../../features/member/dashboard_screen.dart';
 import '../../features/member/summary_screen.dart';
@@ -25,6 +26,7 @@ import '../../features/member/payments_screen.dart';
 import '../../features/member/transactions_screen.dart';
 import '../../features/member/report_screen.dart';
 import '../../features/member/dependants_screen.dart';
+import '../../features/member/membership_application_screen.dart';
 import '../../features/auth/auth_controller.dart';
 import '../auth/role_access.dart';
 import '../utils/error_message.dart';
@@ -38,10 +40,11 @@ final routerProvider = Provider<GoRouter>((ref) {
     redirect: (context, state) {
       final isLoggedIn = authState.isAuthenticated;
       final isLoginRoute = state.matchedLocation == '/login';
+      final isPublicApplicationRoute = state.matchedLocation == '/apply';
       final isAdminRoute = state.matchedLocation.startsWith('/admin');
 
       if (!isLoggedIn) {
-        return isLoginRoute ? null : '/login';
+        return isLoginRoute || isPublicApplicationRoute ? null : '/login';
       }
 
       if (isLoginRoute) {
@@ -60,6 +63,14 @@ final routerProvider = Provider<GoRouter>((ref) {
     },
     routes: [
       GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
+      GoRoute(
+        path: '/apply',
+        builder: (context, state) => const MembershipApplicationScreen(),
+      ),
+      GoRoute(
+        path: '/admin/applications',
+        builder: (context, state) => const AdminApplicationsScreen(),
+      ),
       GoRoute(
           path: '/admin/dashboard',
           builder: (context, state) => const AdminDashboardScreen()),

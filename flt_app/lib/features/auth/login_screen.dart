@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../auth/auth_controller.dart';
 import '../../core/theme/app_colors.dart';
 
@@ -96,7 +97,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       // Hero Banner
                       _buildHeroBanner(theme),
 
-                      const SizedBox(height: 32),
+                      const SizedBox(height: 20),
 
                       // Login Card
                       _buildLoginCard(theme, authState),
@@ -112,36 +113,17 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   }
 
   Widget _buildHeroBanner(ThemeData theme) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(32),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Color(0xFF0F172A),
-            Color(0xFF065F46),
-          ],
-        ),
-        borderRadius: BorderRadius.circular(30),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.2),
-            blurRadius: 20,
-            offset: const Offset(0, 10),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Container(
-            width: 48,
-            height: 48,
+            width: 52,
+            height: 52,
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(12),
+              color: Colors.white.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(16),
             ),
             child: const Icon(
               Icons.nature_people,
@@ -149,18 +131,28 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               size: 32,
             ),
           ),
-          const SizedBox(height: 16),
-          Text(
-            'Malanga Welfare\nCompanion',
-            style: theme.textTheme.displayLarge?.copyWith(
-              color: Colors.white,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Member and Admin Access',
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: Colors.white70,
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Malanga Welfare Companion',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Member and Admin Access',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: Colors.white70,
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -170,10 +162,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   Widget _buildLoginCard(ThemeData theme, dynamic authState) {
     return Container(
-      padding: const EdgeInsets.all(32),
+      padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: const Color(0xFFEEF1F5),
-        borderRadius: BorderRadius.circular(26),
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: theme.colorScheme.outlineVariant),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.2),
@@ -188,7 +181,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             // Segmented Control
-            _buildSegmentedControl(theme),
+            _buildSegmentedControl(),
 
             const SizedBox(height: 24),
 
@@ -248,29 +241,30 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Row(
-                    children: [
-                      SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: Checkbox(
-                          value: _rememberMe,
-                          onChanged: (value) {
-                            setState(() => _rememberMe = value ?? false);
-                          },
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(4),
+                  Flexible(
+                    child: InkWell(
+                      onTap: () => setState(() => _rememberMe = !_rememberMe),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Checkbox(
+                            value: _rememberMe,
+                            onChanged: (value) =>
+                                setState(() => _rememberMe = value ?? false),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(4),
+                            ),
                           ),
-                        ),
+                          Flexible(
+                              child: Text(
+                            'Remember me',
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: AppColors.onSurfaceVariant,
+                            ),
+                          )),
+                        ],
                       ),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Remember me',
-                        style: theme.textTheme.labelSmall?.copyWith(
-                          color: AppColors.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
                   TextButton(
                     onPressed: _showRecoveryHelp,
@@ -338,24 +332,19 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
             const SizedBox(height: 16),
 
-            // Not a member yet?
-            Text.rich(
-              TextSpan(
-                text: 'Not a member yet? ',
+            Text('Not a member yet?',
+                textAlign: TextAlign.center,
                 style: theme.textTheme.bodyMedium?.copyWith(
                   color: AppColors.onSurfaceVariant,
-                ),
-                children: [
-                  TextSpan(
-                    text: 'Apply for Welfare',
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: AppColors.primaryContainer,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
+                )),
+            const SizedBox(height: 4),
+            OutlinedButton.icon(
+              onPressed: () => context.push('/apply'),
+              icon: const Icon(Icons.person_add_alt_1),
+              label: const Text('Apply for membership'),
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size.fromHeight(48),
               ),
-              textAlign: TextAlign.center,
             ),
           ],
         ),
@@ -363,72 +352,24 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     );
   }
 
-  Widget _buildSegmentedControl(ThemeData theme) {
-    return Container(
-      padding: const EdgeInsets.all(2),
-      decoration: BoxDecoration(
-        color: Colors.grey.withValues(alpha: 0.2),
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Row(
-        children: [
-          // Member Portal button
-          Expanded(
-            child: GestureDetector(
-              onTap: () => setState(() => _isMemberPortal = true),
-              child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                decoration: BoxDecoration(
-                  color: _isMemberPortal ? Colors.white : Colors.transparent,
-                  borderRadius: BorderRadius.circular(14),
-                  boxShadow: _isMemberPortal
-                      ? [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.1),
-                            blurRadius: 4,
-                            offset: const Offset(0, 2),
-                          ),
-                        ]
-                      : null,
-                ),
-                child: Text(
-                  'Member Portal',
-                  textAlign: TextAlign.center,
-                  style: theme.textTheme.labelLarge?.copyWith(
-                    color: _isMemberPortal
-                        ? AppColors.onSurface
-                        : AppColors.onSurfaceVariant,
-                    fontWeight:
-                        _isMemberPortal ? FontWeight.w600 : FontWeight.w500,
-                  ),
-                ),
-              ),
-            ),
-          ),
-          // Admin Portal button
-          Expanded(
-            child: GestureDetector(
-              onTap: () => setState(() => _isMemberPortal = false),
-              child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                decoration: BoxDecoration(
-                  color: !_isMemberPortal ? Colors.white : Colors.transparent,
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: Text(
-                  'Admin Portal',
-                  textAlign: TextAlign.center,
-                  style: theme.textTheme.labelLarge?.copyWith(
-                    color: !_isMemberPortal
-                        ? AppColors.onSurface
-                        : AppColors.onSurfaceVariant,
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
+  Widget _buildSegmentedControl() {
+    return SegmentedButton<bool>(
+      showSelectedIcon: false,
+      segments: const [
+        ButtonSegment(
+            value: true,
+            label: Text('Member Portal'),
+            icon: Icon(Icons.group_outlined)),
+        ButtonSegment(
+            value: false,
+            label: Text('Admin Portal'),
+            icon: Icon(Icons.admin_panel_settings_outlined)),
+      ],
+      selected: {_isMemberPortal},
+      onSelectionChanged: (selection) {
+        _formKey.currentState?.reset();
+        setState(() => _isMemberPortal = selection.first);
+      },
     );
   }
 

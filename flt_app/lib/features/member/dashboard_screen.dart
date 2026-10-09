@@ -45,7 +45,7 @@ class _MemberDashboardScreenState extends ConsumerState<MemberDashboardScreen> {
     return MemberShell(
       title: 'Dashboard',
       subtitle: auth.memberName ?? 'Member portal',
-      currentIndex: 0,
+      currentIndex: -1,
       body: FutureBuilder<MemberWalletSnapshot>(
         future: _future,
         builder: (context, snapshot) {
@@ -53,95 +53,97 @@ class _MemberDashboardScreenState extends ConsumerState<MemberDashboardScreen> {
             return const Center(child: CircularProgressIndicator());
           }
           if (snapshot.hasError) {
-            return AsyncErrorView(error: snapshot.error, onRetry: () => setState(() => _future = _load()));
+            return AsyncErrorView(
+                error: snapshot.error,
+                onRetry: () => setState(() => _future = _load()));
           }
 
           final data = snapshot.data!;
+          final name = (auth.memberName ?? '').trim().split(' ').first;
           return RefreshIndicator(
             onRefresh: () async => setState(() => _future = _load()),
             child: ListView(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.fromLTRB(20, 24, 20, 28),
               children: [
-                Wrap(
-                  spacing: 12,
-                  runSpacing: 12,
+                Text(
+                  name.isEmpty ? 'Welcome back' : 'Hello, $name',
+                  style: Theme.of(context).textTheme.headlineMedium,
+                ),
+                const SizedBox(height: 4),
+                Text('Here’s your membership at a glance',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        )),
+                const SizedBox(height: 20),
+                _balancePanel(context, money.format(data.walletBalance)),
+                const SizedBox(height: 24),
+                Text('Your account',
+                    style: Theme.of(context).textTheme.titleLarge),
+                const SizedBox(height: 12),
+                _accountFacts(context, data, money),
+                const SizedBox(height: 26),
+                Text('Quick access',
+                    style: Theme.of(context).textTheme.titleLarge),
+                const SizedBox(height: 12),
+                _quickAccess(context),
+                const SizedBox(height: 28),
+                Row(
                   children: [
-                    _tile('Wallet Balance', money.format(data.walletBalance)),
-                    _tile('Unpaid Cases', '${data.unpaidCasesCount}'),
-                    _tile('Arrears Total', money.format(data.arrearsTotal)),
-                    _tile('Penalty Total', money.format(data.penaltyTotal)),
+                    Expanded(
+                      child: Text('Recent activity',
+                          style: Theme.of(context).textTheme.titleLarge),
+                    ),
+                    TextButton.icon(
+                      onPressed: () => context.go('/member/transactions'),
+                      icon: const Icon(Icons.arrow_forward, size: 18),
+                      label: const Text('All activity'),
+                    ),
                   ],
                 ),
-                const SizedBox(height: 16),
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(14),
-                    child: Wrap(
-                      spacing: 10,
-                      runSpacing: 10,
-                      children: [
-                        _action(context, 'Wallet', '/member/wallet'),
-                        _action(context, 'Cases', '/member/cases'),
-                        _action(
-                            context, 'Transactions', '/member/transactions'),
-                        _action(context, 'Payments', '/member/payments'),
-                        _action(context, 'Dependants', '/member/dependants'),
-                        _action(context, 'Report', '/member/report'),
-                        _action(context, 'Profile', '/member/summary'),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(14),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Recent Activity',
-                          style: TextStyle(
-                              fontWeight: FontWeight.w700, fontSize: 16),
+                const SizedBox(height: 4),
+                if (data.recentTransactions.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 20),
+                    child: Text('No transactions found.',
+                        style: Theme.of(context).textTheme.bodyMedium),
+                  )
+                else
+                  ...data.recentTransactions.take(5).map((tx) {
+                    final date = DateTime.tryParse('${tx['created_at']}');
+                    return ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: CircleAvatar(
+                        backgroundColor:
+                            Theme.of(context).colorScheme.secondaryContainer,
+                        foregroundColor:
+                            Theme.of(context).colorScheme.onSecondaryContainer,
+                        child: const Icon(Icons.receipt_long_outlined),
+                      ),
+                      title: Text(
+                        '${tx['description'] ?? tx['transaction_type'] ?? '-'}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      subtitle: Text(date == null
+                          ? '${tx['transaction_type'] ?? '-'}'
+                          : DateFormat('MMM d, yyyy • h:mm a')
+                              .format(date.toLocal())),
+                      trailing: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 112),
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerRight,
+                          child: Text(
+                            money.format(_toDouble(tx['amount']).abs()),
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleSmall
+                                ?.copyWith(fontWeight: FontWeight.w700),
+                          ),
                         ),
-                        const SizedBox(height: 8),
-                        if (data.recentTransactions.isEmpty)
-                          const Text('No transactions found.')
-                        else
-                          ...data.recentTransactions.take(5).map((tx) {
-                            final date =
-                                DateTime.tryParse('${tx['created_at']}');
-                            return ListTile(
-                              dense: true,
-                              contentPadding: EdgeInsets.zero,
-                              title: Text(
-                                '${tx['description'] ?? tx['transaction_type'] ?? '-'}',
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              subtitle: Text(date == null
-                                  ? '${tx['transaction_type'] ?? '-'}'
-                                  : DateFormat('MMM d, yyyy • h:mm a')
-                                      .format(date.toLocal())),
-                              trailing: ConstrainedBox(
-                                constraints:
-                                    const BoxConstraints(maxWidth: 112),
-                                child: FittedBox(
-                                  fit: BoxFit.scaleDown,
-                                  alignment: Alignment.centerRight,
-                                  child: Text(
-                                    money.format(_toDouble(tx['amount']).abs()),
-                                    style: const TextStyle(
-                                        fontWeight: FontWeight.w700),
-                                  ),
-                                ),
-                              ),
-                            );
-                          }),
-                      ],
-                    ),
-                  ),
-                ),
+                      ),
+                    );
+                  }),
               ],
             ),
           );
@@ -150,20 +152,94 @@ class _MemberDashboardScreenState extends ConsumerState<MemberDashboardScreen> {
     );
   }
 
-  Widget _tile(String label, String value) {
-    return SizedBox(
-      width: 220,
-      child: Card(
+  Widget _balancePanel(BuildContext context, String balance) {
+    final colors = Theme.of(context).colorScheme;
+    return Material(
+      color: colors.primary,
+      borderRadius: BorderRadius.circular(20),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(18, 16, 12, 16),
+        child: Row(
+          children: [
+            const Icon(Icons.account_balance_wallet_outlined,
+                color: Colors.white, size: 22),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('Wallet balance',
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w600,
+                          )),
+                  const SizedBox(height: 4),
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Text(balance,
+                        style:
+                            Theme.of(context).textTheme.headlineSmall?.copyWith(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w800,
+                                )),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 4),
+            IconButton.filledTonal(
+              tooltip: 'Open wallet',
+              onPressed: () => context.go('/member/wallet'),
+              style: IconButton.styleFrom(
+                foregroundColor: Colors.white,
+                backgroundColor: Colors.white.withValues(alpha: 0.16),
+              ),
+              icon: const Icon(Icons.arrow_forward),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _accountFacts(
+      BuildContext context, MemberWalletSnapshot data, NumberFormat money) {
+    return Column(
+      children: [
+        _factRow(context, Icons.assignment_late_outlined, 'Unpaid cases',
+            '${data.unpaidCasesCount}', '/member/cases'),
+        const Divider(height: 1),
+        _factRow(context, Icons.account_balance_outlined, 'Arrears',
+            money.format(data.arrearsTotal), '/member/wallet'),
+        const Divider(height: 1),
+        _factRow(context, Icons.warning_amber_rounded, 'Penalties',
+            money.format(data.penaltyTotal), '/member/wallet'),
+      ],
+    );
+  }
+
+  Widget _factRow(BuildContext context, IconData icon, String label,
+      String value, String route) {
+    return Semantics(
+      button: true,
+      child: InkWell(
+        onTap: () => context.go(route),
         child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          child: Row(
             children: [
-              Text(label, style: const TextStyle(color: Colors.black54)),
-              const SizedBox(height: 6),
+              Icon(icon, color: Theme.of(context).colorScheme.primary),
+              const SizedBox(width: 12),
+              Expanded(child: Text(label)),
               Text(value,
-                  style: const TextStyle(
-                      fontWeight: FontWeight.bold, fontSize: 18)),
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleSmall
+                      ?.copyWith(fontWeight: FontWeight.w700)),
+              const SizedBox(width: 4),
+              const Icon(Icons.chevron_right, size: 20),
             ],
           ),
         ),
@@ -171,11 +247,37 @@ class _MemberDashboardScreenState extends ConsumerState<MemberDashboardScreen> {
     );
   }
 
-  Widget _action(BuildContext context, String label, String route) {
-    return OutlinedButton(
-      onPressed: () => context.go(route),
-      child: Text(label),
-    );
+  Widget _quickAccess(BuildContext context) {
+    const actions = [
+      ('Cases', Icons.assignment_outlined, '/member/cases'),
+      ('Payments', Icons.payments_outlined, '/member/payments'),
+      ('Dependants', Icons.people_outline, '/member/dependants'),
+      ('My report', Icons.bar_chart_outlined, '/member/report'),
+      ('My profile', Icons.person_outline, '/member/summary'),
+      ('Transactions', Icons.receipt_long_outlined, '/member/transactions'),
+    ];
+    return LayoutBuilder(builder: (context, constraints) {
+      final columns = constraints.maxWidth > 600 ? 3 : 2;
+      final width = (constraints.maxWidth - (columns - 1) * 12) / columns;
+      return Wrap(
+        spacing: 12,
+        runSpacing: 12,
+        children: actions
+            .map((action) => SizedBox(
+                  width: width,
+                  child: OutlinedButton.icon(
+                    onPressed: () => context.go(action.$3),
+                    icon: Icon(action.$2, size: 20),
+                    label: Text(action.$1, overflow: TextOverflow.ellipsis),
+                    style: OutlinedButton.styleFrom(
+                      minimumSize: const Size.fromHeight(56),
+                      alignment: Alignment.centerLeft,
+                    ),
+                  ),
+                ))
+            .toList(),
+      );
+    });
   }
 
   double _toDouble(dynamic value) {

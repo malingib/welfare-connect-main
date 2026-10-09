@@ -52,15 +52,13 @@ class SupabaseService {
     String column,
     dynamic value,
   ) async {
-    final response = await client
-        .from(table)
-        .select()
-        .eq(column, value)
-        .maybeSingle();
+    final response =
+        await client.from(table).select().eq(column, value).maybeSingle();
     return response;
   }
 
-  Future<Map<String, dynamic>> insert(String table, Map<String, dynamic> data) async {
+  Future<Map<String, dynamic>> insert(
+      String table, Map<String, dynamic> data) async {
     final response = await client.from(table).insert(data).single();
     return response;
   }
@@ -71,11 +69,8 @@ class SupabaseService {
     dynamic value,
     Map<String, dynamic> data,
   ) async {
-    final response = await client
-        .from(table)
-        .update(data)
-        .eq(column, value)
-        .single();
+    final response =
+        await client.from(table).update(data).eq(column, value).single();
     return response;
   }
 
@@ -87,8 +82,7 @@ class SupabaseService {
   void subscribe(String table, void Function(dynamic) callback) {
     client
         .from(table)
-        .stream(primaryKey: ['id'])
-        .listen((data) => callback(data));
+        .stream(primaryKey: ['id']).listen((data) => callback(data));
   }
 
   // Edge Function helper
@@ -97,10 +91,17 @@ class SupabaseService {
     Map<String, dynamic>? body,
     Map<String, String>? headers,
   }) async {
-    return await client.functions.invoke(
-      functionName,
-      body: body,
-      headers: headers,
-    );
+    return await client.functions
+        .invoke(
+          functionName,
+          body: body,
+          headers: headers,
+        )
+        .timeout(
+          const Duration(seconds: 20),
+          onTimeout: () => throw Exception(
+            'The server did not respond in time. Check your connection and try again.',
+          ),
+        );
   }
 }

@@ -16,6 +16,9 @@ void main() {
       final phoneField = find.byKey(const ValueKey('login_phone_field'));
       expect(memberField, findsOneWidget);
       expect(phoneField, findsOneWidget);
+      expect(find.text('Education'), findsOneWidget);
+      expect(find.text('Funeral Contributions'), findsOneWidget);
+      expect(find.text('Medical Emergencies'), findsOneWidget);
 
       await tester.tap(find.text('Admin Portal'));
       await tester.pump();
@@ -29,6 +32,11 @@ void main() {
               'Please contact a super administrator to reset your admin password. Admin resets are recorded for security.'),
           findsOneWidget);
       await tester.tap(find.text('Close'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Apply for membership'));
+      await tester.pumpAndSettle();
+      expect(find.text('Membership application'), findsOneWidget);
+      expect(find.text('Personal information'), findsOneWidget);
     });
 
     testWidgets('Member login validates required fields without network calls',

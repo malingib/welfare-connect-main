@@ -106,6 +106,7 @@ class MemberDependant {
 class AdminDashboardSnapshot {
   final int totalMembers;
   final int activeCases;
+  final double totalContributions;
   final double pendingSuspenseTotal;
   final int pendingSuspenseCount;
   final List<Map<String, dynamic>> recentActivity;
@@ -113,6 +114,7 @@ class AdminDashboardSnapshot {
   const AdminDashboardSnapshot({
     required this.totalMembers,
     required this.activeCases,
+    required this.totalContributions,
     required this.pendingSuspenseTotal,
     required this.pendingSuspenseCount,
     required this.recentActivity,
@@ -567,6 +569,8 @@ class LiveDataService {
   }
 
   Future<AdminDashboardSnapshot> fetchAdminDashboard({String? appToken}) async {
+    final summaryRows = await _client.rpc('get_dashboard_summary');
+    final summary = (summaryRows as List?)?.whereType<Map>().firstOrNull;
     final members = await _client.from('members').select('id');
     final activeCases =
         await _client.from('cases').select('id').eq('is_active', true);
@@ -591,6 +595,7 @@ class LiveDataService {
     return AdminDashboardSnapshot(
       totalMembers: (members as List).length,
       activeCases: (activeCases as List).length,
+      totalContributions: _toDouble(summary?['total_contributions']),
       pendingSuspenseTotal: suspenseTotal,
       pendingSuspenseCount: suspenseList.length,
       recentActivity: (recentTx as List)
@@ -606,7 +611,13 @@ class LiveDataService {
         .select(
             'id, name, gender, relationship, date_of_birth, is_disabled, is_eligible')
         .eq('member_id', memberId)
-        .order('name');
+        .order('name')
+        .timeout(
+          const Duration(seconds: 20),
+          onTimeout: () => throw Exception(
+            'The server did not respond in time. Check your connection and try again.',
+          ),
+        );
     return (rows as List)
         .whereType<Map>()
         .map((e) => MemberDependant.fromMap(e.cast<String, dynamic>()))
@@ -669,8 +680,13 @@ class LiveDataService {
     } else if (active == 'inactive') {
       query = query.eq('is_active', false);
     }
-    final rows =
-        await query.order('member_number', ascending: true).range(from, to);
+    // member_number is text, so ordering it directly puts 10 before 2.
+    // This generated numeric column is indexed in the database and must be
+    // used before range() so ordering remains correct across page boundaries.
+    final rows = await query
+        .order('member_number_numeric', ascending: true)
+        .order('member_number', ascending: true)
+        .range(from, to);
     return (rows as List)
         .whereType<Map>()
         .map((e) => e.cast<String, dynamic>())
@@ -870,7 +886,13 @@ class LiveDataService {
         .from('residences')
         .select('name')
         .not('name', 'is', null)
-        .order('name');
+        .order('name')
+        .timeout(
+          const Duration(seconds: 20),
+          onTimeout: () => throw Exception(
+            'The server did not respond in time. Check your connection and try again.',
+          ),
+        );
     return rows
         .whereType<Map>()
         .map((row) => row['name']?.toString().trim() ?? '')
@@ -1639,6 +1661,52 @@ class LiveDataService {
     final payload =
         (response.data as Map?)?.cast<String, dynamic>() ?? const {};
     return (payload['template'] as Map?)?.cast<String, dynamic>() ?? const {};
+  }
+
+  Future<List<Map<String, dynamic>>> fetchSmsAlertSettings({
+    required String appToken,
+  }) async {
+    final response = await _supabaseService.invokeFunction(
+      'api-sms-alert-settings',
+      body: {'action': 'list'},
+      headers: {'x-app-token': appToken},
+    );
+    if (response.status < 200 || response.status >= 300) {
+      final payload = (response.data as Map?)?.cast<String, dynamic>();
+      throw Exception(
+          payload?['error']?.toString() ?? 'Failed to load SMS recipients');
+    }
+    final payload =
+        (response.data as Map?)?.cast<String, dynamic>() ?? const {};
+    return (payload['settings'] as List?)
+            ?.whereType<Map>()
+            .map((row) => row.cast<String, dynamic>())
+            .toList() ??
+        const <Map<String, dynamic>>[];
+  }
+
+  Future<Map<String, dynamic>> updateSmsAlertRecipients({
+    required String appToken,
+    required String triggerKey,
+    required List<String> adminUserIds,
+  }) async {
+    final response = await _supabaseService.invokeFunction(
+      'api-sms-alert-settings',
+      body: {
+        'action': 'update',
+        'trigger_key': triggerKey,
+        'admin_user_ids': adminUserIds,
+      },
+      headers: {'x-app-token': appToken},
+    );
+    if (response.status < 200 || response.status >= 300) {
+      final payload = (response.data as Map?)?.cast<String, dynamic>();
+      throw Exception(
+          payload?['error']?.toString() ?? 'Failed to save SMS recipients');
+    }
+    final payload =
+        (response.data as Map?)?.cast<String, dynamic>() ?? const {};
+    return (payload['setting'] as Map?)?.cast<String, dynamic>() ?? const {};
   }
 
   Future<bool> testMpesaConnection({required String appToken}) async {

@@ -13,6 +13,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/constants/app_constants.dart';
 import '../../core/services/live_data_service.dart';
+import '../../core/widgets/async_error_view.dart';
 import '../auth/auth_controller.dart';
 import 'admin_shell.dart';
 
@@ -60,13 +61,15 @@ class _AdminMembersScreenState extends ConsumerState<AdminMembersScreen> {
   }
 
   Future<List<Map<String, dynamic>>> _loadPage() async {
-    final rows = await _service.fetchAdminMembers(
-      page: _page,
-      pageSize: _pageSize,
-      search: _search,
-      status: _statusFilter,
-      active: _activeFilter,
-    );
+    final rows = await _service
+        .fetchAdminMembers(
+          page: _page,
+          pageSize: _pageSize,
+          search: _search,
+          status: _statusFilter,
+          active: _activeFilter,
+        )
+        .timeout(const Duration(seconds: 20));
     _hasMore = rows.length == _pageSize;
     if (mounted) {
       _selectedIds.clear();
@@ -456,7 +459,10 @@ class _AdminMembersScreenState extends ConsumerState<AdminMembersScreen> {
             return const Center(child: CircularProgressIndicator());
           }
           if (snapshot.hasError) {
-            return Center(child: Text(snapshot.error.toString()));
+            return AsyncErrorView(
+              error: snapshot.error,
+              onRetry: _refresh,
+            );
           }
 
           final rows = snapshot.data ?? const [];
@@ -581,6 +587,7 @@ class _AdminMembersScreenState extends ConsumerState<AdminMembersScreen> {
                     Expanded(
                       child: DropdownButtonFormField<String>(
                         initialValue: _activeFilter,
+                        isExpanded: true,
                         decoration: const InputDecoration(
                           labelText: 'Active Filter',
                           border: OutlineInputBorder(),
@@ -603,6 +610,7 @@ class _AdminMembersScreenState extends ConsumerState<AdminMembersScreen> {
                     Expanded(
                       child: DropdownButtonFormField<String>(
                         initialValue: _statusFilter,
+                        isExpanded: true,
                         decoration: const InputDecoration(
                           labelText: 'Status Filter',
                           border: OutlineInputBorder(),
@@ -629,6 +637,19 @@ class _AdminMembersScreenState extends ConsumerState<AdminMembersScreen> {
                   ],
                 ),
                 const SizedBox(height: 14),
+                Row(
+                  children: [
+                    Icon(Icons.swipe,
+                        size: 18,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Swipe the table to see more columns',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
                 SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
                   child: DataTable(

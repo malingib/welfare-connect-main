@@ -33,3 +33,5 @@ playwright-report/
 flt_app/.dart_tool/
 flt_app/build/
 flt_app/devtools_options.yaml
+flt_app/android/key.properties
+*.jks

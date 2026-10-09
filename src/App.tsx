@@ -24,6 +24,7 @@ import {
 // Each page only downloads when the user navigates to it.
 const Login = lazy(() => import("./pages/Login"));
 const Index = lazy(() => import("./pages/Index"));
+const AppDownload = lazy(() => import("./pages/AppDownload"));
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const Members = lazy(() => import("./pages/Members"));
 const MemberDetails = lazy(() => import("./pages/MemberDetails"));
@@ -83,6 +84,7 @@ const App = () => (
         <Suspense fallback={<PageLoader />}>
           <Routes>
           <Route path="/" element={<Index />} />
+          <Route path="/download" element={<AppDownload />} />
           <Route path="/login" element={<Login />} />
           <Route path="/admin/login" element={<Navigate to="/login" replace />} />
           <Route path="/apply" element={<MembershipApplication />} />

@@ -112,6 +112,14 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                     ),
                     const SizedBox(height: 10),
                     Text(
+                      'Contributions total: ${money.format(data.totalContributions)}',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
                       'Suspense total: ${money.format(data.pendingSuspenseTotal)}',
                       style: const TextStyle(
                         color: Color(0xFFBFDBFE),

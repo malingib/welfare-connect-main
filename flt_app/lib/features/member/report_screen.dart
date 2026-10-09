@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 
 import '../../core/constants/app_constants.dart';
 import '../../core/services/live_data_service.dart';
+import '../../core/widgets/async_error_view.dart';
 import '../auth/auth_controller.dart';
 import 'member_shell.dart';
 
@@ -65,7 +66,10 @@ class _MemberReportScreenState extends ConsumerState<MemberReportScreen> {
             return const Center(child: CircularProgressIndicator());
           }
           if (snapshot.hasError) {
-            return Center(child: Text(snapshot.error.toString()));
+            return AsyncErrorView(
+              error: snapshot.error,
+              onRetry: () => setState(() => _future = _load()),
+            );
           }
           final vm = snapshot.data!;
           final data = vm.summary;
@@ -110,63 +114,79 @@ class _MemberReportScreenState extends ConsumerState<MemberReportScreen> {
                       style: TextStyle(fontWeight: FontWeight.w700),
                     ),
                     const SizedBox(height: 10),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: DropdownButtonFormField<String>(
-                            initialValue: _dateFilter,
-                            items: const [
-                              DropdownMenuItem(
-                                  value: '3m', child: Text('Last 3 months')),
-                              DropdownMenuItem(
-                                  value: '6m', child: Text('Last 6 months')),
-                              DropdownMenuItem(
-                                  value: '12m', child: Text('Last 12 months')),
-                              DropdownMenuItem(
-                                  value: 'all', child: Text('All time')),
-                            ],
-                            onChanged: (v) {
-                              if (v == null) return;
-                              setState(() => _dateFilter = v);
-                            },
-                            decoration: const InputDecoration(
-                              labelText: 'Date',
-                              isDense: true,
+                    LayoutBuilder(
+                      builder: (context, constraints) {
+                        final stacked = constraints.maxWidth < 460;
+                        final fieldWidth = stacked
+                            ? constraints.maxWidth
+                            : (constraints.maxWidth - 8) / 2;
+                        return Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            SizedBox(
+                              width: fieldWidth,
+                              child: DropdownButtonFormField<String>(
+                                isExpanded: true,
+                                initialValue: _dateFilter,
+                                items: const [
+                                  DropdownMenuItem(
+                                      value: '3m',
+                                      child: Text('Last 3 months')),
+                                  DropdownMenuItem(
+                                      value: '6m',
+                                      child: Text('Last 6 months')),
+                                  DropdownMenuItem(
+                                      value: '12m',
+                                      child: Text('Last 12 months')),
+                                  DropdownMenuItem(
+                                      value: 'all', child: Text('All time')),
+                                ],
+                                onChanged: (v) {
+                                  if (v == null) return;
+                                  setState(() => _dateFilter = v);
+                                },
+                                decoration: const InputDecoration(
+                                  labelText: 'Date',
+                                  isDense: true,
+                                ),
+                              ),
                             ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: DropdownButtonFormField<String>(
-                            initialValue: _typeFilter,
-                            items: const [
-                              DropdownMenuItem(
-                                  value: 'all', child: Text('All types')),
-                              DropdownMenuItem(
-                                  value: 'contribution',
-                                  child: Text('Contributions')),
-                              DropdownMenuItem(
-                                  value: 'disbursement',
-                                  child: Text('Disbursements')),
-                              DropdownMenuItem(
-                                  value: 'wallet_funding',
-                                  child: Text('Wallet funding')),
-                              DropdownMenuItem(
-                                  value: 'arrears', child: Text('Arrears')),
-                              DropdownMenuItem(
-                                  value: 'penalty', child: Text('Penalty')),
-                            ],
-                            onChanged: (v) {
-                              if (v == null) return;
-                              setState(() => _typeFilter = v);
-                            },
-                            decoration: const InputDecoration(
-                              labelText: 'Type',
-                              isDense: true,
+                            SizedBox(
+                              width: fieldWidth,
+                              child: DropdownButtonFormField<String>(
+                                isExpanded: true,
+                                initialValue: _typeFilter,
+                                items: const [
+                                  DropdownMenuItem(
+                                      value: 'all', child: Text('All types')),
+                                  DropdownMenuItem(
+                                      value: 'contribution',
+                                      child: Text('Contributions')),
+                                  DropdownMenuItem(
+                                      value: 'disbursement',
+                                      child: Text('Disbursements')),
+                                  DropdownMenuItem(
+                                      value: 'wallet_funding',
+                                      child: Text('Wallet funding')),
+                                  DropdownMenuItem(
+                                      value: 'arrears', child: Text('Arrears')),
+                                  DropdownMenuItem(
+                                      value: 'penalty', child: Text('Penalty')),
+                                ],
+                                onChanged: (v) {
+                                  if (v == null) return;
+                                  setState(() => _typeFilter = v);
+                                },
+                                decoration: const InputDecoration(
+                                  labelText: 'Type',
+                                  isDense: true,
+                                ),
+                              ),
                             ),
-                          ),
-                        ),
-                      ],
+                          ],
+                        );
+                      },
                     ),
                     const SizedBox(height: 8),
                     TextField(

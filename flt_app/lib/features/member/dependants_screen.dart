@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:posthog_flutter/posthog_flutter.dart';
 
 import '../../core/services/live_data_service.dart';
+import '../../core/widgets/async_error_view.dart';
 import '../auth/auth_controller.dart';
 import 'member_shell.dart';
 
@@ -29,7 +30,12 @@ class _DependantsScreenState extends ConsumerState<DependantsScreen> {
     if ((auth.memberId ?? '').isEmpty) {
       throw Exception('Missing member session');
     }
-    return _service.fetchDependants(auth.memberId!);
+    return _service.fetchDependants(auth.memberId!).timeout(
+          const Duration(seconds: 20),
+          onTimeout: () => throw Exception(
+            'Loading dependants timed out. Check your connection and try again.',
+          ),
+        );
   }
 
   void _refresh() => setState(() => _future = _load());
@@ -56,7 +62,8 @@ class _DependantsScreenState extends ConsumerState<DependantsScreen> {
     final result = await _showDependantForm(context, initial: dependant);
     if (result == null) return;
     try {
-      await _service.updateDependant(dependantId: dependant.id, dependant: result);
+      await _service.updateDependant(
+          dependantId: dependant.id, dependant: result);
       Posthog().capture(eventName: 'dependant_updated');
       _refresh();
     } catch (e) {
@@ -75,7 +82,9 @@ class _DependantsScreenState extends ConsumerState<DependantsScreen> {
         title: const Text('Delete Dependant'),
         content: Text('Remove ${dependant.name} as a dependant?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('Delete', style: TextStyle(color: Colors.red)),
@@ -143,10 +152,13 @@ class _DependantsScreenState extends ConsumerState<DependantsScreen> {
                           isDense: true,
                           isExpanded: true,
                           items: const [
-                            DropdownMenuItem(value: 'male', child: Text('Male')),
-                            DropdownMenuItem(value: 'female', child: Text('Female')),
+                            DropdownMenuItem(
+                                value: 'male', child: Text('Male')),
+                            DropdownMenuItem(
+                                value: 'female', child: Text('Female')),
                           ],
-                          onChanged: (v) => setDialogState(() => gender = v ?? 'male'),
+                          onChanged: (v) =>
+                              setDialogState(() => gender = v ?? 'male'),
                         ),
                       ),
                     ),
@@ -162,13 +174,19 @@ class _DependantsScreenState extends ConsumerState<DependantsScreen> {
                           isDense: true,
                           isExpanded: true,
                           items: const [
-                            DropdownMenuItem(value: 'Spouse', child: Text('Spouse')),
-                            DropdownMenuItem(value: 'Child', child: Text('Child')),
-                            DropdownMenuItem(value: 'Parent', child: Text('Parent')),
-                            DropdownMenuItem(value: 'Sibling', child: Text('Sibling')),
-                            DropdownMenuItem(value: 'Other', child: Text('Other')),
+                            DropdownMenuItem(
+                                value: 'Spouse', child: Text('Spouse')),
+                            DropdownMenuItem(
+                                value: 'Child', child: Text('Child')),
+                            DropdownMenuItem(
+                                value: 'Parent', child: Text('Parent')),
+                            DropdownMenuItem(
+                                value: 'Sibling', child: Text('Sibling')),
+                            DropdownMenuItem(
+                                value: 'Other', child: Text('Other')),
                           ],
-                          onChanged: (v) => setDialogState(() => relationship = v ?? 'Child'),
+                          onChanged: (v) =>
+                              setDialogState(() => relationship = v ?? 'Child'),
                         ),
                       ),
                     ),
@@ -201,14 +219,16 @@ class _DependantsScreenState extends ConsumerState<DependantsScreen> {
                     CheckboxListTile(
                       title: const Text('Has Disability'),
                       value: isDisabled,
-                      onChanged: (v) => setDialogState(() => isDisabled = v ?? false),
+                      onChanged: (v) =>
+                          setDialogState(() => isDisabled = v ?? false),
                       controlAffinity: ListTileControlAffinity.leading,
                       contentPadding: EdgeInsets.zero,
                     ),
                     CheckboxListTile(
                       title: const Text('Eligible for Benefits'),
                       value: isEligible,
-                      onChanged: (v) => setDialogState(() => isEligible = v ?? true),
+                      onChanged: (v) =>
+                          setDialogState(() => isEligible = v ?? true),
                       controlAffinity: ListTileControlAffinity.leading,
                       contentPadding: EdgeInsets.zero,
                     ),
@@ -274,11 +294,9 @@ class _DependantsScreenState extends ConsumerState<DependantsScreen> {
             return const Center(child: CircularProgressIndicator());
           }
           if (snapshot.hasError) {
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Text('Failed to load dependants: ${snapshot.error}'),
-              ),
+            return AsyncErrorView(
+              error: snapshot.error,
+              onRetry: _refresh,
             );
           }
           final dependants = snapshot.data ?? [];
@@ -290,7 +308,8 @@ class _DependantsScreenState extends ConsumerState<DependantsScreen> {
                       SizedBox(
                         height: MediaQuery.of(context).size.height * 0.3,
                       ),
-                      const Icon(Icons.people_outline, size: 64, color: Colors.black26),
+                      const Icon(Icons.people_outline,
+                          size: 64, color: Colors.black26),
                       const SizedBox(height: 16),
                       const Center(
                         child: Text(
@@ -313,9 +332,12 @@ class _DependantsScreenState extends ConsumerState<DependantsScreen> {
                     itemCount: dependants.length,
                     itemBuilder: (context, index) {
                       final d = dependants[index];
-                      final age = d.dateOfBirth != null && d.dateOfBirth!.isNotEmpty
-                          ? DateTime.now().year - (DateTime.tryParse(d.dateOfBirth!)?.year ?? DateTime.now().year)
-                          : null;
+                      final age =
+                          d.dateOfBirth != null && d.dateOfBirth!.isNotEmpty
+                              ? DateTime.now().year -
+                                  (DateTime.tryParse(d.dateOfBirth!)?.year ??
+                                      DateTime.now().year)
+                              : null;
                       return Card(
                         margin: const EdgeInsets.only(bottom: 12),
                         child: Padding(
@@ -328,16 +350,20 @@ class _DependantsScreenState extends ConsumerState<DependantsScreen> {
                                 children: [
                                   Expanded(
                                     child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
                                         Text(
                                           d.name,
-                                          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+                                          style: const TextStyle(
+                                              fontWeight: FontWeight.w700,
+                                              fontSize: 16),
                                         ),
                                         const SizedBox(height: 2),
                                         Text(
                                           d.relationship ?? '-',
-                                          style: TextStyle(color: Colors.grey[600]),
+                                          style: TextStyle(
+                                              color: Colors.grey[600]),
                                         ),
                                       ],
                                     ),
@@ -350,28 +376,45 @@ class _DependantsScreenState extends ConsumerState<DependantsScreen> {
                                         children: [
                                           if (d.gender != null)
                                             Container(
-                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                      horizontal: 8,
+                                                      vertical: 2),
                                               decoration: BoxDecoration(
-                                                border: Border.all(color: Colors.grey.shade300),
-                                                borderRadius: BorderRadius.circular(12),
+                                                border: Border.all(
+                                                    color:
+                                                        Colors.grey.shade300),
+                                                borderRadius:
+                                                    BorderRadius.circular(12),
                                               ),
                                               child: Text(
-                                                d.gender == 'male' ? 'Male' : 'Female',
-                                                style: const TextStyle(fontSize: 12),
+                                                d.gender == 'male'
+                                                    ? 'Male'
+                                                    : 'Female',
+                                                style: const TextStyle(
+                                                    fontSize: 12),
                                               ),
                                             ),
                                           if (d.isDisabled) ...[
                                             const SizedBox(width: 6),
                                             Container(
-                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                      horizontal: 8,
+                                                      vertical: 2),
                                               decoration: BoxDecoration(
                                                 color: Colors.amber.shade100,
-                                                border: Border.all(color: Colors.amber.shade300),
-                                                borderRadius: BorderRadius.circular(12),
+                                                border: Border.all(
+                                                    color:
+                                                        Colors.amber.shade300),
+                                                borderRadius:
+                                                    BorderRadius.circular(12),
                                               ),
                                               child: const Text(
                                                 'Disabled',
-                                                style: TextStyle(fontSize: 12, color: Colors.brown),
+                                                style: TextStyle(
+                                                    fontSize: 12,
+                                                    color: Colors.brown),
                                               ),
                                             ),
                                           ],
@@ -384,16 +427,21 @@ class _DependantsScreenState extends ConsumerState<DependantsScreen> {
                               const SizedBox(height: 8),
                               Row(
                                 children: [
-                                  if (d.dateOfBirth != null && d.dateOfBirth!.isNotEmpty)
+                                  if (d.dateOfBirth != null &&
+                                      d.dateOfBirth!.isNotEmpty)
                                     Text(
                                       'DOB: ${DateFormat('MMM d, yyyy').format(DateTime.parse(d.dateOfBirth!))}',
-                                      style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                                      style: TextStyle(
+                                          fontSize: 13,
+                                          color: Colors.grey[600]),
                                     ),
                                   if (age != null) ...[
                                     const SizedBox(width: 8),
                                     Text(
                                       'Age: $age',
-                                      style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                                      style: TextStyle(
+                                          fontSize: 13,
+                                          color: Colors.grey[600]),
                                     ),
                                   ],
                                   const Spacer(),
@@ -402,7 +450,9 @@ class _DependantsScreenState extends ConsumerState<DependantsScreen> {
                                     style: TextStyle(
                                       fontSize: 13,
                                       fontWeight: FontWeight.w600,
-                                      color: d.isEligible ? Colors.green : Colors.orange,
+                                      color: d.isEligible
+                                          ? Colors.green
+                                          : Colors.orange,
                                     ),
                                   ),
                                 ],
@@ -419,8 +469,10 @@ class _DependantsScreenState extends ConsumerState<DependantsScreen> {
                                   const SizedBox(width: 4),
                                   TextButton.icon(
                                     onPressed: () => _deleteDependant(d),
-                                    icon: const Icon(Icons.delete_outline, size: 18, color: Colors.red),
-                                    label: const Text('Delete', style: TextStyle(color: Colors.red)),
+                                    icon: const Icon(Icons.delete_outline,
+                                        size: 18, color: Colors.red),
+                                    label: const Text('Delete',
+                                        style: TextStyle(color: Colors.red)),
                                   ),
                                 ],
                               ),

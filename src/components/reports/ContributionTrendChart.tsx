@@ -88,7 +88,7 @@ export function ContributionTrendChart({
           </div>
           <div className="text-sm">
             <p className="text-muted-foreground">Total Transactions</p>
-            <p className="text-2xl font-bold text-purple-600">{data.reduce((sum, d) => sum + d.count, 0).toLocaleString()}</p>
+            <p className="text-2xl font-bold text-primary">{data.reduce((sum, d) => sum + d.count, 0).toLocaleString()}</p>
           </div>
         </div>
       </CardContent>

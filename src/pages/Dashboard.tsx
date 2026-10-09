@@ -255,7 +255,6 @@ const Dashboard = () => {
                 title="Total Members"
                 value={data.totalMembers.toLocaleString()}
                 icon={<Users className="h-5 w-5" />}
-                trend={{ value: 12, isPositive: true }}
               />
               <StatsCard
                 title="Active Cases"
@@ -267,13 +266,11 @@ const Dashboard = () => {
                 title="Total Contributions"
                 value={`KES ${data.totalContributions.toLocaleString()}`}
                 icon={<CreditCard className="h-5 w-5" />}
-                trend={{ value: 8.5, isPositive: true }}
               />
               <StatsCard
                 title="Defaulters"
                 value={data.defaultersCount}
                 icon={<TrendingUp className="h-5 w-5" />}
-                trend={{ value: 2.1, isPositive: false }}
               />
             </>
           )}

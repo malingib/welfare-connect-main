@@ -5,6 +5,7 @@ import 'package:posthog_flutter/posthog_flutter.dart';
 
 import '../../core/constants/app_constants.dart';
 import '../../core/services/live_data_service.dart';
+import '../../core/widgets/async_error_view.dart';
 import 'admin_shell.dart';
 
 class AdminCasesScreen extends StatefulWidget {
@@ -24,8 +25,11 @@ class _AdminCasesScreenState extends State<AdminCasesScreen> {
   @override
   void initState() {
     super.initState();
-    _future = _service.fetchAdminCases();
+    _future = _loadCases();
   }
+
+  Future<List<Map<String, dynamic>>> _loadCases() =>
+      _service.fetchAdminCases().timeout(const Duration(seconds: 20));
 
   @override
   void dispose() {
@@ -34,7 +38,7 @@ class _AdminCasesScreenState extends State<AdminCasesScreen> {
   }
 
   Future<void> _refresh() async {
-    setState(() => _future = _service.fetchAdminCases());
+    setState(() => _future = _loadCases());
     await _future;
   }
 
@@ -46,10 +50,13 @@ class _AdminCasesScreenState extends State<AdminCasesScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Delete Case'),
-        content: Text('Are you sure you want to delete case #${row['case_number'] ?? '-'}? This action cannot be undone.'),
+        content: Text(
+            'Are you sure you want to delete case #${row['case_number'] ?? '-'}? This action cannot be undone.'),
         actions: [
-          TextButton(onPressed: () => ctx.pop(false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => ctx.pop(true), child: const Text('Delete')),
+          TextButton(
+              onPressed: () => ctx.pop(false), child: const Text('Cancel')),
+          FilledButton(
+              onPressed: () => ctx.pop(true), child: const Text('Delete')),
         ],
       ),
     );
@@ -87,7 +94,8 @@ class _AdminCasesScreenState extends State<AdminCasesScreen> {
         Posthog().capture(
           eventName: 'case_reopened',
           properties: {
-            'case_type': (row['case_type'] ?? 'unknown').toString().toLowerCase(),
+            'case_type':
+                (row['case_type'] ?? 'unknown').toString().toLowerCase(),
           },
         );
         if (!mounted) return;
@@ -100,7 +108,8 @@ class _AdminCasesScreenState extends State<AdminCasesScreen> {
         Posthog().capture(
           eventName: 'case_finalized',
           properties: {
-            'case_type': (row['case_type'] ?? 'unknown').toString().toLowerCase(),
+            'case_type':
+                (row['case_type'] ?? 'unknown').toString().toLowerCase(),
             'actual_amount': amount,
           },
         );
@@ -139,7 +148,10 @@ class _AdminCasesScreenState extends State<AdminCasesScreen> {
             return const Center(child: CircularProgressIndicator());
           }
           if (snapshot.hasError) {
-            return Center(child: Text(snapshot.error.toString()));
+            return AsyncErrorView(
+              error: snapshot.error,
+              onRetry: _refresh,
+            );
           }
 
           final rows = snapshot.data ?? const [];
@@ -149,8 +161,12 @@ class _AdminCasesScreenState extends State<AdminCasesScreen> {
             final isFinalized = r['is_finalized'] == true;
             final isActive = r['is_active'] == true;
 
-            if (_statusFilter == 'active' && !(isActive && !isFinalized)) return false;
-            if (_statusFilter == 'inactive' && (isActive || isFinalized)) return false;
+            if (_statusFilter == 'active' && !(isActive && !isFinalized)) {
+              return false;
+            }
+            if (_statusFilter == 'inactive' && (isActive || isFinalized)) {
+              return false;
+            }
             if (_statusFilter == 'finalized' && !isFinalized) return false;
 
             if (_caseTypeFilter != 'all') {
@@ -159,20 +175,26 @@ class _AdminCasesScreenState extends State<AdminCasesScreen> {
             }
 
             if (query.isEmpty) return true;
-            final caseNumber = (r['case_number'] ?? '').toString().toLowerCase();
+            final caseNumber =
+                (r['case_number'] ?? '').toString().toLowerCase();
             final caseType = (r['case_type'] ?? '').toString().toLowerCase();
             return caseNumber.contains(query) || caseType.contains(query);
           }).toList();
 
-          final finalizedCount = rows.where((r) => r['is_finalized'] == true).length;
-          final activeCount = rows.where((r) => r['is_active'] == true && r['is_finalized'] != true).length;
-          final inactiveCount = rows.where((r) => r['is_active'] != true && r['is_finalized'] != true).length;
+          final finalizedCount =
+              rows.where((r) => r['is_finalized'] == true).length;
+          final activeCount = rows
+              .where((r) => r['is_active'] == true && r['is_finalized'] != true)
+              .length;
+          final inactiveCount = rows
+              .where((r) => r['is_active'] != true && r['is_finalized'] != true)
+              .length;
 
           return LayoutBuilder(
             builder: (context, constraints) {
               final isWide = constraints.maxWidth >= 600;
-              final crossAxisCount = isWide ? 2 : 1;
-              final childAspectRatio = isWide ? 2.8 : 3.5;
+              final maxCardWidth = isWide ? 560.0 : 380.0;
+              final childAspectRatio = isWide ? 1.7 : 1.05;
 
               return ListView(
                 padding: const EdgeInsets.all(AppConstants.marginEdge),
@@ -210,39 +232,58 @@ class _AdminCasesScreenState extends State<AdminCasesScreen> {
                     ),
                   ),
                   const SizedBox(height: 10),
-                  Row(
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 10,
                     children: [
-                      Expanded(
+                      SizedBox(
+                        width: isWide
+                            ? (constraints.maxWidth - 10) / 2
+                            : constraints.maxWidth,
                         child: DropdownButtonFormField<String>(
                           initialValue: _statusFilter,
+                          isExpanded: true,
                           decoration: const InputDecoration(
                             labelText: 'Status',
                             border: OutlineInputBorder(),
                           ),
                           items: const [
                             DropdownMenuItem(value: 'all', child: Text('All')),
-                            DropdownMenuItem(value: 'active', child: Text('Active')),
-                            DropdownMenuItem(value: 'inactive', child: Text('Inactive')),
-                            DropdownMenuItem(value: 'finalized', child: Text('Finalized')),
+                            DropdownMenuItem(
+                                value: 'active', child: Text('Active')),
+                            DropdownMenuItem(
+                                value: 'inactive', child: Text('Inactive')),
+                            DropdownMenuItem(
+                                value: 'finalized', child: Text('Finalized')),
                           ],
-                          onChanged: (v) => setState(() => _statusFilter = v ?? 'all'),
+                          onChanged: (v) =>
+                              setState(() => _statusFilter = v ?? 'all'),
                         ),
                       ),
-                      const SizedBox(width: 10),
-                      Expanded(
+                      SizedBox(
+                        width: isWide
+                            ? (constraints.maxWidth - 10) / 2
+                            : constraints.maxWidth,
                         child: DropdownButtonFormField<String>(
                           initialValue: _caseTypeFilter,
+                          isExpanded: true,
                           decoration: const InputDecoration(
                             labelText: 'Case Type',
                             border: OutlineInputBorder(),
                           ),
                           items: const [
                             DropdownMenuItem(value: 'all', child: Text('All')),
-                            DropdownMenuItem(value: 'education', child: Text('Education')),
-                            DropdownMenuItem(value: 'sickness', child: Text('Sickness')),
-                            DropdownMenuItem(value: 'death', child: Text('Death')),
+                            DropdownMenuItem(
+                                value: 'education', child: Text('Education')),
+                            DropdownMenuItem(
+                                value: 'sickness',
+                                child: Text('Medical Emergencies')),
+                            DropdownMenuItem(
+                                value: 'death',
+                                child: Text('Funeral Contributions')),
                           ],
-                          onChanged: (v) => setState(() => _caseTypeFilter = v ?? 'all'),
+                          onChanged: (v) =>
+                              setState(() => _caseTypeFilter = v ?? 'all'),
                         ),
                       ),
                     ],
@@ -251,16 +292,16 @@ class _AdminCasesScreenState extends State<AdminCasesScreen> {
                   if (filtered.isEmpty)
                     const Padding(
                       padding: EdgeInsets.all(20),
-                      child: Center(child: Text('No cases match current filters.')),
+                      child: Center(
+                          child: Text('No cases match current filters.')),
                     )
                   else
                     GridView.builder(
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
-                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: crossAxisCount,
+                      gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+                        maxCrossAxisExtent: maxCardWidth,
                         childAspectRatio: childAspectRatio,
-                        crossAxisSpacing: 12,
                         mainAxisSpacing: 12,
                       ),
                       itemCount: filtered.length,
@@ -271,28 +312,34 @@ class _AdminCasesScreenState extends State<AdminCasesScreen> {
 
                         final expected = _toDouble(r['expected_amount']);
                         final actual = _toDouble(r['actual_amount']);
-                        final contribution = _toDouble(r['contribution_per_member']);
+                        final contribution =
+                            _toDouble(r['contribution_per_member']);
 
                         final progress = expected > 0
                             ? (actual / expected).clamp(0.0, 1.0)
                             : (isFinalized ? 1.0 : 0.0);
                         final variance = actual - expected;
-                        final caseType = (r['case_type'] ?? 'unknown').toString().toLowerCase();
+                        final caseType = (r['case_type'] ?? 'unknown')
+                            .toString()
+                            .toLowerCase();
 
                         return Card(
                           elevation: AppConstants.elevationCard,
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(AppConstants.radiusMedium),
+                            borderRadius: BorderRadius.circular(
+                                AppConstants.radiusMedium),
                             side: const BorderSide(color: Color(0xFFE2E8F0)),
                           ),
                           child: InkWell(
                             onTap: () => context.go('/admin/cases/${r['id']}'),
-                            borderRadius: BorderRadius.circular(AppConstants.radiusMedium),
+                            borderRadius: BorderRadius.circular(
+                                AppConstants.radiusMedium),
                             child: Padding(
                               padding: const EdgeInsets.all(14),
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
                                 children: [
                                   Row(
                                     children: [
@@ -315,10 +362,12 @@ class _AdminCasesScreenState extends State<AdminCasesScreen> {
                                       _statusBadge(isFinalized, isActive),
                                       if (contribution > 0)
                                         Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 8, vertical: 4),
                                           decoration: BoxDecoration(
                                             color: const Color(0xFFF1F5F9),
-                                            borderRadius: BorderRadius.circular(999),
+                                            borderRadius:
+                                                BorderRadius.circular(999),
                                           ),
                                           child: Text(
                                             '${money.format(contribution)} / member',
@@ -342,7 +391,8 @@ class _AdminCasesScreenState extends State<AdminCasesScreen> {
                                   ),
                                   const SizedBox(height: 4),
                                   Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
                                     children: [
                                       Text(
                                         '${(progress * 100).toStringAsFixed(0)}% collected',
@@ -355,7 +405,9 @@ class _AdminCasesScreenState extends State<AdminCasesScreen> {
                                         'Variance: ${variance >= 0 ? '+' : ''}${money.format(variance)}',
                                         style: TextStyle(
                                           fontSize: 11,
-                                          color: variance >= 0 ? const Color(0xFF16A34A) : const Color(0xFFDC2626),
+                                          color: variance >= 0
+                                              ? const Color(0xFF16A34A)
+                                              : const Color(0xFFDC2626),
                                           fontWeight: FontWeight.w600,
                                         ),
                                       ),
@@ -367,17 +419,22 @@ class _AdminCasesScreenState extends State<AdminCasesScreen> {
                                       Expanded(
                                         child: FilledButton.tonal(
                                           onPressed: () => _toggleCase(r),
-                                          child: Text(isFinalized ? 'Reopen' : 'Finalize'),
+                                          child: Text(isFinalized
+                                              ? 'Reopen'
+                                              : 'Finalize'),
                                         ),
                                       ),
                                       const SizedBox(width: 8),
                                       IconButton(
                                         onPressed: () => _deleteCase(r),
-                                        icon: const Icon(Icons.delete_outline, size: 18),
+                                        icon: const Icon(Icons.delete_outline,
+                                            size: 18),
                                         tooltip: 'Delete',
                                         style: IconButton.styleFrom(
-                                          backgroundColor: const Color(0xFFFEF2F2),
-                                          foregroundColor: const Color(0xFFDC2626),
+                                          backgroundColor:
+                                              const Color(0xFFFEF2F2),
+                                          foregroundColor:
+                                              const Color(0xFFDC2626),
                                         ),
                                       ),
                                     ],
@@ -426,7 +483,12 @@ class _AdminCasesScreenState extends State<AdminCasesScreen> {
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
-        caseType.toUpperCase(),
+        switch (caseType) {
+          'education' => 'EDUCATION',
+          'sickness' => 'MEDICAL EMERGENCIES',
+          'death' => 'FUNERAL CONTRIBUTIONS',
+          _ => caseType.replaceAll('_', ' ').toUpperCase(),
+        },
         style: TextStyle(
           color: fg,
           fontSize: 11,

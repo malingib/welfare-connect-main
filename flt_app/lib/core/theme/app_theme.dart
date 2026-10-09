@@ -129,19 +129,21 @@ ThemeData get appTheme {
     // Input Decoration Theme (Text Fields)
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
-      fillColor: AppColors.surfaceContainerLowest,
+      // Keep text fields visually distinct from the white form/card surface.
+      fillColor: AppColors.surfaceContainerLow,
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(16),
-        borderSide: BorderSide.none,
+        borderSide: const BorderSide(color: AppColors.outlineVariant),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(16),
-        borderSide: BorderSide.none,
+        borderSide: const BorderSide(color: AppColors.outlineVariant),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(16),
-        borderSide: const BorderSide(color: AppColors.primaryContainer, width: 2),
+        borderSide:
+            const BorderSide(color: AppColors.primaryContainer, width: 2),
       ),
       errorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(16),
@@ -189,7 +191,8 @@ ThemeData get appTheme {
 
     // Scrollbar Theme
     scrollbarTheme: ScrollbarThemeData(
-      thumbColor: WidgetStateProperty.all(AppColors.outline.withValues(alpha: 0.5)),
+      thumbColor:
+          WidgetStateProperty.all(AppColors.outline.withValues(alpha: 0.5)),
       trackColor: WidgetStateProperty.all(Colors.transparent),
     ),
   );

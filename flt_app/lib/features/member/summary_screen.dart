@@ -30,10 +30,17 @@ class _MemberSummaryScreenState extends ConsumerState<MemberSummaryScreen> {
     if ((auth.memberId ?? '').isEmpty || (auth.appToken ?? '').isEmpty) {
       throw Exception('Session missing member identity. Please log in again.');
     }
-    return _service.fetchMemberSummary(
-      memberId: auth.memberId!,
-      appToken: auth.appToken!,
-    );
+    return _service
+        .fetchMemberSummary(
+          memberId: auth.memberId!,
+          appToken: auth.appToken!,
+        )
+        .timeout(
+          const Duration(seconds: 20),
+          onTimeout: () => throw Exception(
+            'Loading your profile timed out. Check your connection and try again.',
+          ),
+        );
   }
 
   @override
@@ -54,7 +61,9 @@ class _MemberSummaryScreenState extends ConsumerState<MemberSummaryScreen> {
             return const Center(child: CircularProgressIndicator());
           }
           if (snapshot.hasError) {
-            return AsyncErrorView(error: snapshot.error, onRetry: () => setState(() => _future = _load()));
+            return AsyncErrorView(
+                error: snapshot.error,
+                onRetry: () => setState(() => _future = _load()));
           }
 
           final member =

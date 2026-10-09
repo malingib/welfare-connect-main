@@ -65,7 +65,9 @@ class _CasesScreenState extends ConsumerState<CasesScreen> {
             return const Center(child: CircularProgressIndicator());
           }
           if (snapshot.hasError) {
-            return AsyncErrorView(error: snapshot.error, onRetry: () => setState(() => _future = _load()));
+            return AsyncErrorView(
+                error: snapshot.error,
+                onRetry: () => setState(() => _future = _load()));
           }
 
           final cases = snapshot.data ?? const <MemberCaseSnapshot>[];
@@ -170,7 +172,7 @@ class _CasesScreenState extends ConsumerState<CasesScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          '#${c.caseNumber} • ${c.caseType.toUpperCase()}',
+                          '#${c.caseNumber} • ${_caseTypeLabel(c.caseType)}',
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(fontWeight: FontWeight.w700),
@@ -227,6 +229,13 @@ class _CasesScreenState extends ConsumerState<CasesScreen> {
       ),
     );
   }
+
+  String _caseTypeLabel(String value) => switch (value.toLowerCase()) {
+        'education' => 'EDUCATION',
+        'sickness' => 'MEDICAL EMERGENCIES',
+        'death' => 'FUNERAL CONTRIBUTIONS',
+        _ => value.replaceAll('_', ' ').toUpperCase(),
+      };
 }
 
 class _SummaryBox extends StatelessWidget {

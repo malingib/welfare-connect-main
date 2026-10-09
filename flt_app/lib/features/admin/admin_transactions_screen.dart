@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/constants/app_constants.dart';
 import '../../core/services/live_data_service.dart';
+import '../../core/widgets/async_error_view.dart';
 import '../auth/auth_controller.dart';
 import 'admin_shell.dart';
 
@@ -42,11 +43,13 @@ class _AdminTransactionsScreenState
   }
 
   Future<List<Map<String, dynamic>>> _loadPage() async {
-    final rows = await _service.fetchAdminTransactions(
-      page: _page,
-      pageSize: _pageSize,
-      search: _search,
-    );
+    final rows = await _service
+        .fetchAdminTransactions(
+          page: _page,
+          pageSize: _pageSize,
+          search: _search,
+        )
+        .timeout(const Duration(seconds: 20));
     _hasMore = rows.length == _pageSize;
     return rows;
   }
@@ -74,8 +77,12 @@ class _AdminTransactionsScreenState
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-          ElevatedButton(onPressed: () => Navigator.pop(context, true), child: const Text('Reverse')),
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel')),
+          ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Reverse')),
         ],
       ),
     );
@@ -106,8 +113,10 @@ class _AdminTransactionsScreenState
     final txId = (tx['id'] ?? '').toString();
     if (txId.isEmpty) return;
 
-    final descCtrl = TextEditingController(text: tx['description']?.toString() ?? '');
-    final caseIdCtrl = TextEditingController(text: tx['case_id']?.toString() ?? '');
+    final descCtrl =
+        TextEditingController(text: tx['description']?.toString() ?? '');
+    final caseIdCtrl =
+        TextEditingController(text: tx['case_id']?.toString() ?? '');
 
     final ok = await showDialog<bool>(
       context: context,
@@ -134,8 +143,12 @@ class _AdminTransactionsScreenState
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-          ElevatedButton(onPressed: () => Navigator.pop(context, true), child: const Text('Save')),
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel')),
+          ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Save')),
         ],
       ),
     );
@@ -174,8 +187,12 @@ class _AdminTransactionsScreenState
           decoration: const InputDecoration(labelText: 'Reason'),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-          ElevatedButton(onPressed: () => Navigator.pop(context, true), child: const Text('Run')),
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel')),
+          ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Run')),
         ],
       ),
     );
@@ -208,7 +225,9 @@ class _AdminTransactionsScreenState
       _future = _loadPage();
     });
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Bulk reverse done. Success: $success, Failed: $failed')),
+      SnackBar(
+          content:
+              Text('Bulk reverse done. Success: $success, Failed: $failed')),
     );
   }
 
@@ -234,7 +253,10 @@ class _AdminTransactionsScreenState
             return const Center(child: CircularProgressIndicator());
           }
           if (snapshot.hasError) {
-            return Center(child: Text(snapshot.error.toString()));
+            return AsyncErrorView(
+              error: snapshot.error,
+              onRetry: _refresh,
+            );
           }
           final rows = snapshot.data ?? const [];
           final filteredRows = rows.where((r) {
@@ -300,26 +322,33 @@ class _AdminTransactionsScreenState
                   Expanded(
                     child: DropdownButtonFormField<String>(
                       initialValue: _typeFilter,
+                      isExpanded: true,
                       decoration: const InputDecoration(
                         labelText: 'Type Filter',
                         isDense: true,
                       ),
                       items: const [
-                        DropdownMenuItem(value: 'all', child: Text('All Types')),
+                        DropdownMenuItem(
+                            value: 'all', child: Text('All Types')),
                         DropdownMenuItem(
                             value: 'contribution', child: Text('Contribution')),
                         DropdownMenuItem(
-                            value: 'contribution_refund', child: Text('Contribution Refund')),
+                            value: 'contribution_refund',
+                            child: Text('Contribution Refund')),
                         DropdownMenuItem(
                             value: 'disbursement', child: Text('Disbursement')),
                         DropdownMenuItem(
-                            value: 'registration', child: Text('Registration Fee')),
+                            value: 'registration',
+                            child: Text('Registration Fee')),
                         DropdownMenuItem(
                             value: 'renewal', child: Text('Renewal Fee')),
-                        DropdownMenuItem(value: 'penalty', child: Text('Penalty')),
-                        DropdownMenuItem(value: 'arrears', child: Text('Arrears')),
                         DropdownMenuItem(
-                            value: 'wallet_funding', child: Text('Wallet Funding')),
+                            value: 'penalty', child: Text('Penalty')),
+                        DropdownMenuItem(
+                            value: 'arrears', child: Text('Arrears')),
+                        DropdownMenuItem(
+                            value: 'wallet_funding',
+                            child: Text('Wallet Funding')),
                       ],
                       onChanged: (value) {
                         if (value == null) return;
@@ -331,15 +360,20 @@ class _AdminTransactionsScreenState
                   Expanded(
                     child: DropdownButtonFormField<String>(
                       initialValue: _statusFilter,
+                      isExpanded: true,
                       decoration: const InputDecoration(
                         labelText: 'Status Filter',
                         isDense: true,
                       ),
                       items: const [
-                        DropdownMenuItem(value: 'all', child: Text('All Status')),
-                        DropdownMenuItem(value: 'completed', child: Text('Completed')),
-                        DropdownMenuItem(value: 'pending', child: Text('Pending')),
-                        DropdownMenuItem(value: 'reversed', child: Text('Reversed')),
+                        DropdownMenuItem(
+                            value: 'all', child: Text('All Status')),
+                        DropdownMenuItem(
+                            value: 'completed', child: Text('Completed')),
+                        DropdownMenuItem(
+                            value: 'pending', child: Text('Pending')),
+                        DropdownMenuItem(
+                            value: 'reversed', child: Text('Reversed')),
                       ],
                       onChanged: (value) {
                         if (value == null) return;
@@ -373,84 +407,101 @@ class _AdminTransactionsScreenState
                     ),
                   ),
                   child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Checkbox(
-                          value: _selected.contains(txId),
-                          onChanged: reversed
-                              ? null
-                              : (v) {
-                                  setState(() {
-                                    if (v == true) {
-                                      _selected.add(txId);
-                                    } else {
-                                      _selected.remove(txId);
-                                    }
-                                  });
-                                },
-                        ),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                '${r['description'] ?? r['transaction_type'] ?? '-'}',
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 15,
-                                ),
-                              ),
-                              const SizedBox(height: 6),
-                              Text(
-                                '${r['transaction_type'] ?? '-'} • ${date == null ? '-' : DateFormat('MMM d, yyyy • h:mm a').format(date.toLocal())}',
-                                style: const TextStyle(color: Color(0xFF64748B)),
-                              ),
-                              const SizedBox(height: 8),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 10, vertical: 4),
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(999),
-                                  color: reversed
-                                      ? const Color(0xFFFEE2E2)
-                                      : const Color(0xFFDCFCE7),
-                                ),
-                                child: Text(
-                                  '${r['status'] ?? '-'}'.toUpperCase(),
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w700,
-                                    color: reversed
-                                        ? const Color(0xFFB91C1C)
-                                        : const Color(0xFF166534),
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Checkbox(
+                        value: _selected.contains(txId),
+                        onChanged: reversed
+                            ? null
+                            : (v) {
+                                setState(() {
+                                  if (v == true) {
+                                    _selected.add(txId);
+                                  } else {
+                                    _selected.remove(txId);
+                                  }
+                                });
+                              },
+                      ),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    '${r['description'] ?? r['transaction_type'] ?? '-'}',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 15,
+                                    ),
                                   ),
                                 ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
+                                const SizedBox(width: 8),
+                                Flexible(
+                                  child: Text(
+                                    money.format(amount.abs()),
+                                    textAlign: TextAlign.end,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.w700),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
                             Text(
-                              money.format(amount.abs()),
-                              style: const TextStyle(fontWeight: FontWeight.w700),
+                              '${r['transaction_type'] ?? '-'} • ${date == null ? '-' : DateFormat('MMM d, yyyy • h:mm a').format(date.toLocal())}',
+                              style: const TextStyle(color: Color(0xFF64748B)),
+                            ),
+                            const SizedBox(height: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 4),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(999),
+                                color: reversed
+                                    ? const Color(0xFFFEE2E2)
+                                    : const Color(0xFFDCFCE7),
+                              ),
+                              child: Text(
+                                '${r['status'] ?? '-'}'.toUpperCase(),
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: reversed
+                                      ? const Color(0xFFB91C1C)
+                                      : const Color(0xFF166534),
+                                ),
+                              ),
                             ),
                             if (!reversed) ...[
-                              TextButton(
-                                onPressed: () => _editTransaction(r),
-                                child: const Text('Edit'),
-                              ),
-                              TextButton(
-                                onPressed: () => _reverseTransaction(r),
-                                child: const Text('Revert'),
+                              const SizedBox(height: 4),
+                              Align(
+                                alignment: Alignment.centerRight,
+                                child: Wrap(
+                                  spacing: 4,
+                                  children: [
+                                    TextButton(
+                                      onPressed: () => _editTransaction(r),
+                                      child: const Text('Edit'),
+                                    ),
+                                    TextButton(
+                                      onPressed: () => _reverseTransaction(r),
+                                      child: const Text('Revert'),
+                                    ),
+                                  ],
+                                ),
                               ),
                             ],
                           ],
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
+                  ),
                 );
               }),
               const SizedBox(height: 8),

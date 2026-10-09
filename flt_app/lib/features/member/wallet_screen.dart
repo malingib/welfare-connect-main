@@ -65,7 +65,9 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
             return const Center(child: CircularProgressIndicator());
           }
           if (snapshot.hasError) {
-            return AsyncErrorView(error: snapshot.error, onRetry: () => setState(() => _future = _load()));
+            return AsyncErrorView(
+                error: snapshot.error,
+                onRetry: () => setState(() => _future = _load()));
           }
 
           final data = snapshot.data!;
@@ -183,11 +185,6 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
                       onPressed: _busy ? null : _openTransferDialog,
                       icon: const Icon(Icons.swap_horiz),
                       label: const Text('Transfer Funds'),
-                    ),
-                    OutlinedButton.icon(
-                      onPressed: _busy ? null : _openPinDialog,
-                      icon: const Icon(Icons.lock_reset),
-                      label: const Text('Change PIN'),
                     ),
                   ],
                 ),
@@ -562,96 +559,6 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  Future<void> _openPinDialog() async {
-    final auth = ref.read(authControllerProvider);
-    final oldCtrl = TextEditingController();
-    final newCtrl = TextEditingController();
-    final confirmCtrl = TextEditingController();
-
-    await showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Change PIN'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-                controller: oldCtrl,
-                obscureText: true,
-                decoration: const InputDecoration(labelText: 'Old PIN')),
-            const SizedBox(height: 8),
-            TextField(
-                controller: newCtrl,
-                obscureText: true,
-                decoration: const InputDecoration(labelText: 'New PIN')),
-            const SizedBox(height: 8),
-            TextField(
-                controller: confirmCtrl,
-                obscureText: true,
-                decoration: const InputDecoration(labelText: 'Confirm PIN')),
-          ],
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          ElevatedButton(
-            onPressed: () async {
-              if ((auth.memberId ?? '').isEmpty) return;
-              final oldPin = oldCtrl.text.trim();
-              final newPin = newCtrl.text.trim();
-              final confirmPin = confirmCtrl.text.trim();
-              if (oldPin.isEmpty) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                      content: Text('Old PIN is required.'),
-                      backgroundColor: Colors.red),
-                );
-                return;
-              }
-              final isSixDigits = RegExp(r'^\d{6}$').hasMatch(newPin);
-              if (newPin != confirmPin || !isSixDigits) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                      content:
-                          Text('PIN must be 6 digits and match confirmation.'),
-                      backgroundColor: Colors.red),
-                );
-                return;
-              }
-              setState(() => _busy = true);
-              try {
-                await _service.updateMemberPin(
-                  memberId: auth.memberId!,
-                  oldPin: oldPin,
-                  newPin: newPin,
-                );
-                if (!mounted) return;
-                Posthog().capture(eventName: 'wallet_pin_updated');
-                Navigator.of(context).pop();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                      content: Text('PIN updated successfully.'),
-                      backgroundColor: Colors.green),
-                );
-              } catch (e) {
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                        content: Text('Failed: $e'),
-                        backgroundColor: Colors.red),
-                  );
-                }
-              } finally {
-                if (mounted) setState(() => _busy = false);
-              }
-            },
-            child: const Text('Update PIN'),
-          ),
-        ],
       ),
     );
   }

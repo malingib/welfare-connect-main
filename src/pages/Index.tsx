@@ -19,6 +19,7 @@ import {
   PiggyBank,
   ChevronLeft,
   ChevronRight,
+  Download,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -32,8 +33,6 @@ type HeroSlide = {
   titleB: string;
   body: string;
   image: string;
-  statValue: string;
-  statLabel: string;
 };
 
 type TeamMember = { name: string; role: string; image: string; initials: string; phone: string };
@@ -48,8 +47,6 @@ const HERO_SLIDES: HeroSlide[] = [
     body: 'Malanga Community Welfare is a united network of families helping one another through grief and difficult seasons with dignity and care.',
     image:
       'https://images.unsplash.com/photo-1488521787991-ed7bbaae773c?q=80&w=1200&auto=format&fit=crop',
-    statValue: 'KSh 120',
-    statLabel: 'Member contribution during bereavement support',
   },
   {
     eyebrow: 'Built for neighbourly care',
@@ -58,8 +55,6 @@ const HERO_SLIDES: HeroSlide[] = [
     body: 'We stand together as one family across Malanga and neighbouring sub-locations, making sure no member household faces hardship alone.',
     image:
       'https://images.unsplash.com/photo-1593113598332-cd288d649433?q=80&w=1200&auto=format&fit=crop',
-    statValue: 'KSh 200',
-    statLabel: 'Registration fee to join the welfare',
   },
   {
     eyebrow: 'Transparent and compassionate',
@@ -68,8 +63,6 @@ const HERO_SLIDES: HeroSlide[] = [
     body: 'From bereavement support to member administration, Malanga is designed to be easier, faster and more transparent for every household we serve.',
     image:
       'https://images.unsplash.com/photo-1469571486292-0ba58a3f068b?q=80&w=1200&auto=format&fit=crop',
-    statValue: '90–180',
-    statLabel: 'Day probation period before benefit eligibility',
   },
 ];
 
@@ -188,6 +181,7 @@ const Index = () => {
               ))}
               <div className="mt-2 grid gap-2">
                 <Button variant="outline" className="w-full" onClick={goJoin}>Become a Member</Button>
+                <Button variant="outline" className="w-full" onClick={() => { setMobileOpen(false); navigate('/download'); }}><Download className="mr-2 h-4 w-4" /> Download the App</Button>
                 <Button className="w-full bg-[#c2410c] hover:bg-[#9a3412]" onClick={goMemberPortal}>Member Login</Button>
                 <Button variant="outline" className="w-full" onClick={goAdmin}>Admin Login</Button>
               </div>
@@ -202,7 +196,7 @@ const Index = () => {
           <img key={active.image} src={active.image} alt="" className="h-full w-full object-cover opacity-30" loading="eager" />
           <div className="absolute inset-0 bg-[#0a1f33]/55" />
         </div>
-        <div className="relative mx-auto grid max-w-7xl gap-10 px-4 py-14 sm:px-6 lg:grid-cols-[1.05fr_0.95fr] lg:items-center lg:py-20">
+        <div className="relative mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:py-20">
           <div>
             <Badge className="bg-[#f7c948] text-[#0a1f33] hover:bg-[#f7c948]">{active.eyebrow}</Badge>
             <h1 className="mt-5 text-4xl font-black leading-[1.05] tracking-tight sm:text-5xl lg:text-6xl">
@@ -216,6 +210,9 @@ const Index = () => {
               </Button>
               <Button size="lg" variant="outline" className="border-white/30 bg-transparent text-white hover:bg-white/10" onClick={() => document.getElementById('about')?.scrollIntoView({ behavior: 'smooth' })}>
                 Read More
+              </Button>
+              <Button size="lg" variant="outline" className="border-white/30 bg-white text-[#0a1f33] hover:bg-slate-100" onClick={() => navigate('/download')}>
+                <Download className="mr-2 h-4 w-4" /> Download the App
               </Button>
             </div>
             <div className="mt-8 flex items-center gap-3">
@@ -240,7 +237,7 @@ const Index = () => {
       {/* ===== Category strip ===== */}
       <section className="mx-auto -mt-0 grid max-w-7xl gap-4 px-4 py-10 sm:grid-cols-2 sm:px-6 lg:grid-cols-3">
         {CATEGORIES.map(({ no, title, desc, icon: Icon, bg }) => (
-          <Card key={title} className="group overflow-hidden border border-slate-200 bg-white transition-shadow hover:shadow-lg">
+          <Card id={`cause-${no}`} key={title} className="group overflow-hidden border border-slate-200 bg-white transition-shadow hover:shadow-lg">
             <CardContent className={`p-5 ${bg}`}>
               <div className="flex items-start justify-between">
                 <span className="text-4xl font-black text-slate-900/10">{no}</span>
@@ -267,7 +264,11 @@ const Index = () => {
               We stand together as one family, supporting and caring for one another during times of bereavement and unexpected hardship. Currently, the welfare is operating under the Death/Bereavement Pillar.
             </p>
             <ul className="mt-5 space-y-3 text-[15px]">
-              {['Members contribute KSh 120 whenever a committed member experiences bereavement or a qualifying distress situation.', 'Probation is 90 or 180 days depending on the applicable rules before benefits are accessible.', 'All members under 75 years are eligible to join, with family support extending to spouses and children under 25.'].map((t) => (
+              {[
+                'Members come together to support one another during bereavement and unexpected hardship.',
+                'Member benefits are guided by the welfare’s current rules and eligibility requirements.',
+                'The welfare is built around community care, shared responsibility, and dignity.',
+              ].map((t) => (
                 <li key={t} className="flex items-start gap-2.5">
                   <BadgeCheck className="mt-0.5 h-5 w-5 shrink-0 text-[#1a4d2e]" /> <span>{t}</span>
                 </li>
@@ -384,16 +385,17 @@ const Index = () => {
           <nav aria-label="Our welfare">
             <p className="font-extrabold text-white">Our Welfare</p>
             <ul className="mt-4 space-y-2.5 text-sm">
-              {['About us', 'Become a Member', 'Contact', 'FAQs', 'Donations', 'Events'].map((l) => (
-                <li key={l}><a href="#about" className="hover:text-white">{l}</a></li>
-              ))}
+              <li><a href="#about" className="hover:text-white">About us</a></li>
+              <li><a href="/apply" className="hover:text-white">Become a Member</a></li>
+              <li><a href="/download" className="hover:text-white">Download the App</a></li>
+              <li><a href="#contact" className="hover:text-white">Contact</a></li>
             </ul>
           </nav>
           <nav aria-label="For members">
             <p className="font-extrabold text-white">For Members</p>
             <ul className="mt-4 space-y-2.5 text-sm">
-              {['Funeral Contributions', 'Medical Emergencies', 'Sponsorships'].map((l) => (
-                <li key={l}><a href="#causes" className="hover:text-white">{l}</a></li>
+              {CATEGORIES.map(({ title, no }) => (
+                <li key={title}><a href={`#cause-${no}`} className="hover:text-white">{title}</a></li>
               ))}
             </ul>
           </nav>

@@ -230,37 +230,41 @@ class _AdminComplianceReportsScreenState
                 .toList() ??
             const <Map<String, dynamic>>[];
 
-        return Wrap(
-          spacing: 12,
-          runSpacing: 12,
-          children: [
-            _statCard(
-              'Total Reversals',
-              reversals.length.toString(),
-              subtitle:
-                  'KES ${reversals.fold<double>(0, (sum, r) => sum + _toDouble(r['reversal_amount']).abs()).toStringAsFixed(2)} reversed',
-              icon: Icons.file_copy,
+        return SizedBox(
+          height: 116,
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                _statCard(
+                  'Total Reversals',
+                  reversals.length.toString(),
+                  subtitle:
+                      'KES ${reversals.fold<double>(0, (sum, r) => sum + _toDouble(r['reversal_amount']).abs()).toStringAsFixed(2)} reversed',
+                  icon: Icons.file_copy,
+                ),
+                _statCard(
+                  'Compliance Issues',
+                  issues.length.toString(),
+                  subtitle:
+                      '${issues.where((i) => (i['severity'] ?? '') == 'high' || (i['severity'] ?? '') == 'critical').length} critical/high',
+                  icon: Icons.warning_amber_rounded,
+                ),
+                _statCard(
+                  'Audit Entries',
+                  auditTrail.length.toString(),
+                  subtitle: 'Last 100 entries',
+                  icon: Icons.shield,
+                ),
+                _statCard(
+                  'Suspense Pending',
+                  '0',
+                  subtitle: 'KES 0.00 pending',
+                  icon: Icons.pending_actions,
+                ),
+              ],
             ),
-            _statCard(
-              'Compliance Issues',
-              issues.length.toString(),
-              subtitle:
-                  '${issues.where((i) => (i['severity'] ?? '') == 'high' || (i['severity'] ?? '') == 'critical').length} critical/high',
-              icon: Icons.warning_amber_rounded,
-            ),
-            _statCard(
-              'Audit Entries',
-              auditTrail.length.toString(),
-              subtitle: 'Last 100 entries',
-              icon: Icons.shield,
-            ),
-            _statCard(
-              'Suspense Pending',
-              '0',
-              subtitle: 'KES 0.00 pending',
-              icon: Icons.pending_actions,
-            ),
-          ],
+          ),
         );
       },
     );
@@ -270,42 +274,50 @@ class _AdminComplianceReportsScreenState
       {required String subtitle, required IconData icon}) {
     return SizedBox(
       width: 220,
+      height: 108,
       child: Container(
-        padding: const EdgeInsets.all(14),
+        margin: const EdgeInsets.only(right: 10),
+        padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(color: const Color(0xFFE2E8F0)),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        child: Row(
           children: [
             Container(
-              padding: const EdgeInsets.all(8),
+              padding: const EdgeInsets.all(7),
               decoration: BoxDecoration(
                 color: const Color(0xFFEFF6FF),
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: Icon(icon, size: 18, color: const Color(0xFF1F3556)),
+              child: Icon(icon, size: 17, color: const Color(0xFF1F3556)),
             ),
-            const SizedBox(height: 10),
-            Text(value,
-                style:
-                    const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-            const SizedBox(height: 4),
-            Text(
-              label,
-              style: const TextStyle(
-                color: Color(0xFF64748B),
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              subtitle,
-              style: const TextStyle(
-                color: Color(0xFF94A3B8),
-                fontSize: 11,
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(value,
+                      style: const TextStyle(
+                          fontWeight: FontWeight.bold, fontSize: 17)),
+                  Text(label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Color(0xFF434840),
+                        fontWeight: FontWeight.w600,
+                        fontSize: 12,
+                      )),
+                  Text(subtitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Color(0xFF5F665B),
+                        fontSize: 10,
+                      )),
+                ],
               ),
             ),
           ],
@@ -315,14 +327,15 @@ class _AdminComplianceReportsScreenState
   }
 
   Widget _buildFilterControls() {
-    return Row(
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
       children: [
         OutlinedButton.icon(
           onPressed: _pickDateRange,
           icon: const Icon(Icons.filter_list, size: 16),
           label: Text(_dateRange == null ? 'Date filter' : 'Date filtered'),
         ),
-        const SizedBox(width: 8),
         OutlinedButton.icon(
           onPressed: _dateRange == null
               ? null
@@ -353,14 +366,17 @@ class _AdminComplianceReportsScreenState
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              Wrap(
+                spacing: 12,
+                runSpacing: 8,
+                alignment: WrapAlignment.spaceBetween,
                 children: [
                   const Text(
                     'Case Payment Compliance',
                     style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
                   ),
-                  Row(
+                  Wrap(
+                    spacing: 8,
                     children: [
                       OutlinedButton.icon(
                         onPressed: () => _exportReport(
@@ -400,7 +416,6 @@ class _AdminComplianceReportsScreenState
                         icon: const Icon(Icons.download, size: 16),
                         label: const Text('Summary CSV'),
                       ),
-                      const SizedBox(width: 8),
                       OutlinedButton.icon(
                         onPressed: () => _exportReport(
                           title: 'case_payment_compliance',
@@ -530,14 +545,17 @@ class _AdminComplianceReportsScreenState
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              Wrap(
+                spacing: 12,
+                runSpacing: 8,
+                alignment: WrapAlignment.spaceBetween,
                 children: [
                   const Text(
                     'Audit Trail',
                     style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
                   ),
-                  Row(
+                  Wrap(
+                    spacing: 8,
                     children: [
                       OutlinedButton.icon(
                         onPressed: () => _exportReport(
@@ -563,7 +581,6 @@ class _AdminComplianceReportsScreenState
                         icon: const Icon(Icons.download, size: 16),
                         label: const Text('Export CSV'),
                       ),
-                      const SizedBox(width: 8),
                       OutlinedButton.icon(
                         onPressed: () => _exportReport(
                           title: 'audit_trail',
@@ -745,8 +762,10 @@ class _AdminComplianceReportsScreenState
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              Wrap(
+                spacing: 12,
+                runSpacing: 8,
+                alignment: WrapAlignment.spaceBetween,
                 children: [
                   const Text(
                     'Reversals Audit',
@@ -870,8 +889,10 @@ class _AdminComplianceReportsScreenState
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              Wrap(
+                spacing: 12,
+                runSpacing: 8,
+                alignment: WrapAlignment.spaceBetween,
                 children: [
                   const Text(
                     'Compliance Issues',
@@ -917,10 +938,12 @@ class _AdminComplianceReportsScreenState
                     children: [
                       Icon(Icons.check_circle, color: Colors.green, size: 32),
                       SizedBox(width: 12),
-                      Text(
-                        'All Clear! No compliance issues detected.',
-                        style:
-                            TextStyle(color: Color(0xFF64748B), fontSize: 16),
+                      Expanded(
+                        child: Text(
+                          'All Clear! No compliance issues detected.',
+                          style:
+                              TextStyle(color: Color(0xFF434840), fontSize: 16),
+                        ),
                       ),
                     ],
                   ),
