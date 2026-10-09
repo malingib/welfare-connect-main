@@ -298,16 +298,83 @@ serve(async (req: Request): Promise<Response> => {
           console.error('Could not queue registration payment admin alert:', notificationError.message)
         }
 
+        // Registration payments are matched to a unique application payment code,
+        // so they can be activated immediately. Previously this callback only
+        // marked the payment as received and waited for an admin click, which
+        // delayed member-number delivery by 20+ minutes.
+        const { data: activationResult, error: activationError } = await supabase.rpc('activate_membership_application', {
+          p_application_id: membershipApplication.id,
+        })
+        if (activationError || !activationResult?.success) {
+          const message = activationError?.message || activationResult?.message || 'Membership activation failed'
+          await supabase.from('audit_logs').insert({
+            action: 'MEMBERSHIP_ACTIVATION_FAILED',
+            table_name: 'membership_applications',
+            record_id: membershipApplication.id,
+            status: 'error',
+            new_values: { payment_code: billRefNumber, receipt: normalizedTransID, error: message },
+          })
+          throw new Error(message)
+        }
+
+        const { data: activatedMember } = await supabase
+          .from('members')
+          .select('id, name, member_number, phone_number, probation_end_date')
+          .eq('id', activationResult.id)
+          .single()
+        const { data: activationTemplate } = await supabase
+          .from('sms_templates')
+          .select('raw_template')
+          .eq('trigger_key', 'registration_activated')
+          .maybeSingle()
+        const activationMessage = String(
+          activationTemplate?.raw_template ||
+          'Malanga Welfare: Congratulations {name}. Your membership is now active. Your member number is {memberNumber}.',
+        )
+          .replaceAll('{name}', String(activatedMember?.name || membershipApplication.full_name))
+          .replaceAll('{memberNumber}', String(activatedMember?.member_number || activationResult.member_number))
+          .replaceAll('{phoneNumber}', String(activatedMember?.phone_number || membershipApplication.phone_number))
+          .replaceAll('{portalLink}', 'https://malangawelfare.org/login?role=member')
+
+        const { error: activationNotificationError } = await supabase.from('notifications').insert({
+          member_id: activationResult.id,
+          role: 'member',
+          title: 'Membership Activated',
+          message: activationMessage,
+          category: 'registration_activated',
+          data: {
+            source: 'c2b_webhook',
+            application_id: membershipApplication.id,
+            member_number: activationResult.member_number,
+            probation_end_date: activatedMember?.probation_end_date || null,
+          },
+        })
+        if (activationNotificationError) {
+          console.error('Could not queue membership activation notification:', activationNotificationError.message)
+        }
+
+        await supabase.from('notifications').insert({
+          member_id: activationResult.id,
+          role: 'member',
+          title: 'Members WhatsApp Group Invitation',
+          message: 'Your members WhatsApp group invitation is ready.',
+          category: 'whatsapp_group_invite',
+          data: { source: 'c2b_webhook', application_id: membershipApplication.id, use_current_whatsapp_group_link: true },
+        })
+
         try {
           const { data: template } = await supabase
             .from('sms_templates')
             .select('raw_template')
-            .eq('trigger_key', 'registration_payment_received')
+            .eq('trigger_key', 'registration_activated')
             .maybeSingle()
           const rawTemplate = String((template as { raw_template?: unknown } | null)?.raw_template || '').trim()
-          const message = (rawTemplate || 'Malanga Welfare: We have received payment for application code {paymentCode}. The Welfare Committee will verify it before activating your membership.')
-            .replaceAll('{paymentCode}', String(membershipApplication.payment_code || ''))
-          const results = await sendSmsMessage([membershipApplication.phone_number], message)
+          const message = (rawTemplate || activationMessage)
+            .replaceAll('{name}', String(activatedMember?.name || membershipApplication.full_name))
+            .replaceAll('{memberNumber}', String(activatedMember?.member_number || activationResult.member_number))
+            .replaceAll('{phoneNumber}', String(activatedMember?.phone_number || membershipApplication.phone_number))
+            .replaceAll('{portalLink}', 'https://malangawelfare.org/login?role=member')
+          const results = await sendSmsMessage([activatedMember?.phone_number || membershipApplication.phone_number], message)
           await Promise.all(results.map((result) => supabase.from('audit_logs').insert({
             action: isSmsFailure(result) ? 'SMS_FAILED' : 'SMS_SENT',
             table_name: 'sms',
@@ -320,10 +387,11 @@ serve(async (req: Request): Promise<Response> => {
               provider_message_id: result.providerMessageId,
               provider_response: result.raw,
               application_id: membershipApplication.id,
+              member_number: activatedMember?.member_number || activationResult.member_number,
             },
           })))
         } catch (smsError) {
-          console.error('Application payment SMS failed:', smsError instanceof Error ? smsError.message : String(smsError))
+          console.error('Membership activation SMS failed:', smsError instanceof Error ? smsError.message : String(smsError))
         }
 
         return new Response(JSON.stringify({ ResultCode: 0, ResultDesc: 'Accepted' }), {

@@ -8,6 +8,11 @@
   RewriteRule . /index.html [L]
 </IfModule>
 
+# Serve Android packages with the correct download content type.
+<IfModule mod_mime.c>
+  AddType application/vnd.android.package-archive .apk
+</IfModule>
+
 # Last-resort fallback if mod_rewrite is disabled
 ErrorDocument 404 /index.html
 
@@ -18,6 +23,11 @@ ErrorDocument 404 /index.html
     Header always set Cache-Control "no-cache, no-store, must-revalidate"
     Header always set Pragma "no-cache"
     Header always set Expires "0"
+  </FilesMatch>
+
+  # The stable APK URL is overwritten by later releases; avoid stale downloads.
+  <FilesMatch "\.apk$">
+    Header always set Cache-Control "no-cache, must-revalidate"
   </FilesMatch>
 
   <FilesMatch "\.(?:js|css|png|jpg|jpeg|gif|svg|webp|woff2?)$">

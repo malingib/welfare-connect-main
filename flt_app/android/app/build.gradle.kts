@@ -43,7 +43,7 @@ android {
             create("release") {
                 keyAlias = releaseKeystoreProperties.getProperty("keyAlias")
                 keyPassword = releaseKeystoreProperties.getProperty("keyPassword")
-                storeFile = file(releaseKeystoreProperties.getProperty("storeFile"))
+                storeFile = rootProject.file(releaseKeystoreProperties.getProperty("storeFile"))
                 storePassword = releaseKeystoreProperties.getProperty("storePassword")
             }
         }

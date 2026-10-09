@@ -29,7 +29,7 @@ const AppDownload = () => (
           <a href={APK_URL} download="malanga-welfare.apk" className="mt-8 inline-flex min-h-12 items-center justify-center rounded-lg bg-[#f7c948] px-6 py-3 font-bold text-[#0a1f33] transition-colors hover:bg-[#ffe07a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-[#0a1f33]">
             <Download className="mr-2 h-5 w-5" /> Download for Android
           </a>
-          <p className="mt-3 text-sm text-slate-300">APK file · Android phones and tablets</p>
+          <p className="mt-3 text-sm text-slate-300">APK file · about 73 MB · Android phones and tablets</p>
         </div>
 
         <div className="relative mx-auto flex w-full max-w-sm items-center justify-center py-4" aria-hidden="true">
@@ -57,7 +57,7 @@ const AppDownload = () => (
         {[
           ['Download', 'Tap the download button and wait for the APK file to finish downloading.'],
           ['Open the file', 'Open the downloaded APK from your browser or Downloads folder.'],
-          ['Install', 'Review Android’s prompt and tap Install to add the app to your device.'],
+          ['Install', 'If prompted, allow your browser to install unknown apps, return to the APK, then tap Install.'],
         ].map(([title, detail], index) => (
           <li key={title} className="border-t border-slate-300 py-5 sm:border-l sm:border-t-0 sm:pl-5 sm:pr-4">
             <span className="text-sm font-bold text-[#c2410c]">STEP 0{index + 1}</span>
@@ -70,7 +70,7 @@ const AppDownload = () => (
 
     <aside className="mx-auto mb-14 max-w-7xl px-4 sm:px-6">
       <div className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
-        <p className="max-w-3xl text-sm leading-6 text-slate-600">For your safety, install the app only from the official Malanga Welfare website. Android may ask you to confirm that you trust the browser you used to download the file.</p>
+        <p className="max-w-3xl text-sm leading-6 text-slate-600">For your safety, install the app only from the official Malanga Welfare website. If Android prompts you, tap Settings, enable “Allow from this source” for your browser, return to the downloaded APK, and continue installation.</p>
         <Button asChild variant="outline" className="shrink-0 border-slate-300">
           <Link to="/login?role=member">Use member portal online</Link>
         </Button>

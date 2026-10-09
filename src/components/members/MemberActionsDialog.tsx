@@ -19,7 +19,6 @@ import {
 import { toast } from '@/components/ui/use-toast'
 import { Member } from '@/lib/types'
 import { AlertTriangle } from 'lucide-react'
-import { supabase } from '@/integrations/supabase/client'
 import { invokeWithAppToken } from '@/lib/appAuth'
 
 interface MemberActionsDialogProps {
@@ -130,20 +129,9 @@ export function MemberActionsDialog({
     setIsProcessing(true)
 
     try {
-      const currentUser = JSON.parse(localStorage.getItem('currentUser') || '{}')
-
-      if (!currentUser.id) {
-        throw new Error('User not authenticated')
-      }
-
-      const { data, error } = await (supabase as any).rpc('safe_delete_member', {
-        p_member_id: member.id,
-        p_admin_id: currentUser.id,
+      const result = await invokeWithAppToken<{ success: boolean; message: string }>('api-member-delete', {
+        member_id: member.id,
       })
-
-      if (error) throw error
-
-      const result = data as any
       if (!result.success) {
         throw new Error(result.message)
       }

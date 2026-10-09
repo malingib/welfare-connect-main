@@ -108,6 +108,65 @@ serve(async (req) => {
       return response(origin, 200, { applications: data || [] });
     }
 
+    if (action === "edit") {
+      const id = String(body.application_id || "").trim();
+      if (!id) return response(origin, 400, { error: "application_id is required" });
+
+      const { data: existing, error: loadError } = await supabase
+        .from("membership_applications")
+        .select("id, status")
+        .eq("id", id)
+        .single();
+      if (loadError || !existing) return response(origin, 404, { error: "Application not found" });
+
+      const fullName = String(body.full_name || "").trim();
+      const nationalId = String(body.national_id_number || "").trim();
+      const dateOfBirth = String(body.date_of_birth || "").trim();
+      const phone = normalizePhone(body.phone_number);
+      const residenceStatus = String(body.residence_status || "").trim();
+      if (!fullName || !nationalId || !dateOfBirth || !phone || !["resident", "non_resident"].includes(residenceStatus)) {
+        return response(origin, 400, { error: "Complete all required application fields." });
+      }
+      if (!/^254(7|1)\d{8}$/.test(phone)) return response(origin, 400, { error: "Enter a valid Kenyan mobile number." });
+      if (residenceStatus === "resident" && !String(body.village || "").trim()) {
+        return response(origin, 400, { error: "Select a Malanga village." });
+      }
+      if (residenceStatus === "non_resident" && !String(body.current_location || "").trim()) {
+        return response(origin, 400, { error: "Enter the applicant's current location." });
+      }
+
+      const { data: updated, error } = await supabase
+        .from("membership_applications")
+        .update({
+          full_name: fullName,
+          national_id_number: nationalId,
+          date_of_birth: dateOfBirth,
+          gender: String(body.gender || "").trim(),
+          phone_number: phone,
+          alternative_phone_number: body.alternative_phone_number ? normalizePhone(body.alternative_phone_number) : null,
+          email_address: String(body.email_address || "").trim() || null,
+          residence_status: residenceStatus,
+          village: residenceStatus === "resident" ? String(body.village || "").trim() : null,
+          current_location: residenceStatus === "non_resident" ? String(body.current_location || "").trim() : null,
+          review_reason: String(body.review_reason || "").trim() || null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", id)
+        .select("*")
+        .single();
+      if (error) throw error;
+      return response(origin, 200, { success: true, application: updated });
+    }
+
+    if (action === "delete") {
+      const id = String(body.application_id || "").trim();
+      if (!id) return response(origin, 400, { error: "application_id is required" });
+
+      const { error } = await supabase.from("membership_applications").delete().eq("id", id);
+      if (error) throw error;
+      return response(origin, 200, { success: true });
+    }
+
     if (action === "review") {
       const id = String(body.application_id || "").trim();
       const decision = String(body.decision || "").trim().toLowerCase();
