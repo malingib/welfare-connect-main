@@ -13,16 +13,9 @@ import { corsFor } from "../_shared/cors.ts";
 import { isSmsFailure, sendSmsMessage, type SmsSendResult } from "../_shared/sms.ts";
 
 const SWEPT_CATEGORIES = [
-  "registration_submitted",
-  "registration_pending_review",
-  "registration_approved",
-  "registration_payment_pending",
   "registration_payment_received",
   "payment_received",
-  "registration_activated",
   "registration_expired",
-  "whatsapp_group_invite",
-  "registration_rejected",
   "probation_completed",
   "probation_ending",
   "penalty_posted",
@@ -52,6 +45,7 @@ serve(async (req) => {
       .select("id, member_id, title, message, category, data")
       .is("sms_sent_at", null)
       .in("category", SWEPT_CATEGORIES)
+      .not("data->>sms_delivery_mode", "eq", "immediate")
       .or(`created_at.gte.${cutoff},and(category.eq.whatsapp_group_invite,created_at.gte.${invitationCutoff})`)
       .order("created_at", { ascending: true })
       .limit(500);

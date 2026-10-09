@@ -2,7 +2,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { corsFor } from "../_shared/cors.ts";
 import { requirePrivilegedRole, verifyAppJwtFromRequest } from "../_shared/app_jwt.ts"
-import { isSmsFailure, isValidSmsPhoneNumber, sendSmsMessage, summarizeSmsFailure } from "../_shared/sms.ts"
+import { isSmsFailure, isSmsQuotaFailure, isValidSmsPhoneNumber, sendSmsMessage, summarizeSmsFailure } from "../_shared/sms.ts"
 
 type RecipientData = {
   phoneNumber: string;
@@ -260,7 +260,12 @@ serve(async (req) => {
     // producing partial sends. Personalised tags still require one provider
     // call per recipient, so we parallelise with a cap instead of one bulk call.
     const CONCURRENCY = 10;
+    let providerLimitReached = false;
     async function processRecipient(recipient: RecipientData): Promise<void> {
+      if (providerLimitReached) {
+        skipped.push({ phoneNumber: recipient.phoneNumber, reason: 'Provider sending limit reached', name: recipient.name });
+        return;
+      }
       const built = await buildRecipientContext(supabase, recipient, triggerKey);
       if (built.skip) {
         skipped.push({ phoneNumber: recipient.phoneNumber, reason: built.skipReason || 'Skipped', name: recipient.name });
@@ -276,6 +281,7 @@ serve(async (req) => {
     }
     for (let i = 0; i < recipients.length; i += CONCURRENCY) {
       await Promise.all(recipients.slice(i, i + CONCURRENCY).map(processRecipient));
+      if (allResults.slice(-CONCURRENCY).some(({ result }) => isSmsQuotaFailure(result))) providerLimitReached = true;
     }
 
     // Batch the audit/notification writes instead of one round-trip per row.

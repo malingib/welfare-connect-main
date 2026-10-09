@@ -286,6 +286,7 @@ serve(async (req: Request): Promise<Response> => {
           title: 'New Member Registration Payment',
           message: `Registration payment of KES ${transAmount.toLocaleString('en-KE')} received for ${membershipApplication.full_name} (${membershipApplication.payment_code}). Receipt: ${normalizedTransID}.`,
           category: 'registration_payment_received',
+          event_key: `application:${membershipApplication.id}:registration_payment_received`,
           data: {
             source: 'c2b_webhook',
             application_id: membershipApplication.id,
@@ -336,12 +337,13 @@ serve(async (req: Request): Promise<Response> => {
           .replaceAll('{phoneNumber}', String(activatedMember?.phone_number || membershipApplication.phone_number))
           .replaceAll('{portalLink}', 'https://malangawelfare.org/login?role=member')
 
-        const { error: activationNotificationError } = await supabase.from('notifications').insert({
+        const { data: activationNotification, error: activationNotificationError } = await supabase.from('notifications').insert({
           member_id: activationResult.id,
           role: 'member',
           title: 'Membership Activated',
           message: activationMessage,
           category: 'registration_activated',
+          event_key: `application:${membershipApplication.id}:registration_activated`,
           data: {
             source: 'c2b_webhook',
             application_id: membershipApplication.id,
@@ -353,14 +355,15 @@ serve(async (req: Request): Promise<Response> => {
           console.error('Could not queue membership activation notification:', activationNotificationError.message)
         }
 
-        await supabase.from('notifications').insert({
+        const { data: whatsappNotification } = await supabase.from('notifications').insert({
           member_id: activationResult.id,
           role: 'member',
           title: 'Members WhatsApp Group Invitation',
           message: 'Your members WhatsApp group invitation is ready.',
           category: 'whatsapp_group_invite',
+          event_key: `application:${membershipApplication.id}:whatsapp_group_invite`,
           data: { source: 'c2b_webhook', application_id: membershipApplication.id, use_current_whatsapp_group_link: true },
-        })
+        }).select('id').single()
 
         try {
           const { data: template } = await supabase
@@ -375,13 +378,18 @@ serve(async (req: Request): Promise<Response> => {
             .replaceAll('{phoneNumber}', String(activatedMember?.phone_number || membershipApplication.phone_number))
             .replaceAll('{portalLink}', 'https://malangawelfare.org/login?role=member')
           const results = await sendSmsMessage([activatedMember?.phone_number || membershipApplication.phone_number], message)
+          const activationSmsSent = results.length > 0 && results.every((result) => !isSmsFailure(result))
+          const activationNotificationId = (activationNotification as { data?: { id?: string } | null } | null)?.data?.id
+          if (activationSmsSent && activationNotificationId) {
+            await supabase.from('notifications').update({ sms_sent_at: new Date().toISOString(), data: { source: 'c2b_webhook', application_id: membershipApplication.id, member_number: activationResult.member_number, sms_delivery_mode: 'immediate' } }).eq('id', activationNotificationId)
+          }
           await Promise.all(results.map((result) => supabase.from('audit_logs').insert({
             action: isSmsFailure(result) ? 'SMS_FAILED' : 'SMS_SENT',
             table_name: 'sms',
             status: isSmsFailure(result) ? 'error' : 'success',
             metadata: {
               source: 'c2b_webhook',
-              trigger_key: 'registration_payment_received',
+              trigger_key: 'registration_activated',
               phone_number: result.phoneNumber,
               provider: result.provider,
               provider_message_id: result.providerMessageId,
@@ -390,6 +398,17 @@ serve(async (req: Request): Promise<Response> => {
               member_number: activatedMember?.member_number || activationResult.member_number,
             },
           })))
+
+          const { data: whatsappSettings } = await supabase.from('settings').select('whatsapp_group_link').limit(1).maybeSingle()
+          const whatsappLink = String(whatsappSettings?.whatsapp_group_link || Deno.env.get('WHATSAPP_GROUP_LINK') || '').trim()
+          if (whatsappLink && whatsappNotification?.id) {
+            const { data: whatsappTemplate } = await supabase.from('sms_templates').select('raw_template').eq('trigger_key', 'whatsapp_group_invite').maybeSingle()
+            const whatsappMessage = String(whatsappTemplate?.raw_template || 'Malanga Welfare: Join the members WhatsApp group here: {whatsappLink}. Please do not share this link publicly.').replaceAll('{whatsappLink}', whatsappLink)
+            const whatsappResults = await sendSmsMessage([activatedMember?.phone_number || membershipApplication.phone_number], whatsappMessage)
+            const whatsappSent = whatsappResults.length > 0 && whatsappResults.every((result) => !isSmsFailure(result))
+            if (whatsappSent) await supabase.from('notifications').update({ sms_sent_at: new Date().toISOString(), data: { source: 'c2b_webhook', application_id: membershipApplication.id, sms_delivery_mode: 'immediate' } }).eq('id', whatsappNotification.id)
+            await Promise.all(whatsappResults.map((result) => supabase.from('audit_logs').insert({ action: isSmsFailure(result) ? 'SMS_FAILED' : 'SMS_SENT', table_name: 'sms', status: isSmsFailure(result) ? 'error' : 'success', metadata: { source: 'c2b_webhook', trigger_key: 'whatsapp_group_invite', phone_number: result.phoneNumber, provider: result.provider, provider_message_id: result.providerMessageId, provider_response: result.raw, application_id: membershipApplication.id } })))
+          }
         } catch (smsError) {
           console.error('Membership activation SMS failed:', smsError instanceof Error ? smsError.message : String(smsError))
         }

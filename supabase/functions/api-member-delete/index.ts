@@ -61,6 +61,42 @@ serve(async (req) => {
       });
     }
 
+    // Remove dependent records that use restrictive foreign keys before the
+    // member row. This is required for members with historical transactions
+    // or a linked member login account.
+    const { data: linkedUsers, error: linkedUsersError } = await supabase
+      .from("users")
+      .select("id")
+      .eq("member_id", memberId);
+    if (linkedUsersError) throw linkedUsersError;
+
+    const linkedUserIds = (linkedUsers || []).map((user) => String(user.id)).filter(Boolean);
+    if (linkedUserIds.length) {
+      const { error: credentialsError } = await supabase
+        .from("user_credentials")
+        .delete()
+        .in("user_id", linkedUserIds);
+      if (credentialsError) throw credentialsError;
+
+      const { error: usersError } = await supabase
+        .from("users")
+        .delete()
+        .in("id", linkedUserIds);
+      if (usersError) throw usersError;
+    }
+
+    const { error: transactionsError } = await supabase
+      .from("transactions")
+      .delete()
+      .eq("member_id", memberId);
+    if (transactionsError) throw transactionsError;
+
+    const { error: dependantsError } = await supabase
+      .from("dependants")
+      .delete()
+      .eq("member_id", memberId);
+    if (dependantsError) throw dependantsError;
+
     const { error: deleteError } = await supabase.from("members").delete().eq("id", memberId);
     if (deleteError) throw deleteError;
     return response(origin, 200, { success: true, message: "Member deleted successfully" });

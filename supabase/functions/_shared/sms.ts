@@ -261,6 +261,11 @@ export function isSmsFailure(result: SmsSendResult): boolean {
   return !result.ok || result.status === 'failed';
 }
 
+export function isSmsQuotaFailure(result: SmsSendResult): boolean {
+  const raw = JSON.stringify(result.raw || {}).toLowerCase();
+  return raw.includes('exceeded your sending limit') || raw.includes('sending limit') || raw.includes('insufficient balance') || raw.includes('insufficient credits');
+}
+
 export async function fetchSmsBalance(): Promise<{ balance: number | null; raw: unknown | null }> {
   const provider = resolveSmsProvider();
   if (!provider.mobiwaveToken) {

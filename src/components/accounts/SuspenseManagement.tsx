@@ -67,6 +67,18 @@ interface WrongMpesaTransaction {
     name: string
     member_number: string
   } | null
+  registration_candidates?: RegistrationCandidate[]
+}
+
+interface RegistrationCandidate {
+  id: string
+  application_reference: string
+  full_name: string
+  phone_number: string
+  status: string
+  payment_code?: string | null
+  amount_matches: boolean
+  expected_amount: number
 }
 
 interface Member {
@@ -97,6 +109,9 @@ export function SuspenseManagement() {
   const [memberSearchTerm, setMemberSearchTerm] = useState('')
   const [searchResults, setSearchResults] = useState<Member[]>([])
   const [isSearching, setIsSearching] = useState(false)
+  const [registrationMatchOpen, setRegistrationMatchOpen] = useState(false)
+  const [registrationCandidates, setRegistrationCandidates] = useState<RegistrationCandidate[]>([])
+  const [isRegistrationMatching, setIsRegistrationMatching] = useState(false)
 
   // Auto-match confirmation dialog
   const [autoMatchDialogOpen, setAutoMatchDialogOpen] = useState(false)
@@ -311,6 +326,36 @@ export function SuspenseManagement() {
     setMemberSearchTerm('')
     setSearchResults([])
     setMemberSearchOpen(true)
+  }
+
+  const openRegistrationMatch = (transaction: WrongMpesaTransaction) => {
+    setSelectedTransaction(transaction)
+    setRegistrationCandidates(transaction.registration_candidates || [])
+    setRegistrationMatchOpen(true)
+  }
+
+  const handleRegistrationMatch = async (candidate: RegistrationCandidate) => {
+    if (!selectedTransaction || !candidate.amount_matches) return
+    if (!confirm(`Activate ${candidate.full_name} using receipt ${selectedTransaction.mpesa_receipt_number}?`)) return
+
+    setIsRegistrationMatching(true)
+    try {
+      const result = await invokeWithAppToken<{ member_number: string; application: string }>('api-membership-applications', {
+        action: 'match_suspense_payment',
+        suspense_id: selectedTransaction.id,
+        application_id: candidate.id,
+      })
+      toast.success('Registration payment matched', {
+        description: `${candidate.full_name} activated as member ${result.member_number}.`,
+      })
+      setRegistrationMatchOpen(false)
+      setSelectedTransaction(null)
+      await fetchSuspenseTransactions()
+    } catch (error: any) {
+      toast.error('Registration match failed', { description: error.message })
+    } finally {
+      setIsRegistrationMatching(false)
+    }
   }
 
   const searchMembers = async () => {
@@ -637,6 +682,17 @@ END $$;`}
                           <TableCell className="px-2 md:px-4 whitespace-nowrap">
                             {(tx.status === 'pending' || tx.status === 'PENDING_REVIEW') && (
                               <div className="flex gap-1 md:gap-2">
+                                {(tx.registration_candidates?.length || 0) > 0 && (
+                                  <Button
+                                    size="sm"
+                                    variant="default"
+                                    onClick={() => openRegistrationMatch(tx)}
+                                    className="h-7 md:h-8 text-xs"
+                                  >
+                                    <CheckCircle className="mr-1 h-3 w-3 md:h-4 md:w-4" />
+                                    <span className="hidden lg:inline">Registration</span>
+                                  </Button>
+                                )}
                                 <Button
                                   size="sm"
                                   variant="outline"
@@ -736,6 +792,41 @@ END $$;`}
       </Dialog>
 
       {/* Member Search Dialog */}
+      <Dialog open={registrationMatchOpen} onOpenChange={setRegistrationMatchOpen}>
+        <DialogContent className="w-[95vw] sm:max-w-[560px]">
+          <DialogHeader>
+            <DialogTitle>Match Registration Payment</DialogTitle>
+          </DialogHeader>
+          {selectedTransaction && (
+            <div className="space-y-4">
+              <div className="rounded-lg bg-muted p-3 text-sm space-y-1">
+                <p><strong>Receipt:</strong> {selectedTransaction.mpesa_receipt_number || 'N/A'}</p>
+                <p><strong>Sender phone:</strong> {selectedTransaction.phone_number || 'N/A'}</p>
+                <p><strong>Amount:</strong> KES {Number(selectedTransaction.amount || 0).toLocaleString()}</p>
+                <p className="text-muted-foreground">Candidates are suggested by the payer phone. Confirm the applicant before activating.</p>
+              </div>
+              <div className="divide-y rounded-lg border">
+                {registrationCandidates.map((candidate) => (
+                  <div key={candidate.id} className="flex items-center justify-between gap-3 p-3">
+                    <div className="min-w-0">
+                      <p className="font-medium truncate">{candidate.full_name}</p>
+                      <p className="text-xs text-muted-foreground">{candidate.application_reference} · {candidate.phone_number}</p>
+                      <p className="text-xs text-muted-foreground capitalize">{candidate.status.replaceAll('_', ' ')}</p>
+                    </div>
+                    <Button size="sm" onClick={() => void handleRegistrationMatch(candidate)} disabled={!candidate.amount_matches || isRegistrationMatching}>
+                      {candidate.amount_matches ? 'Confirm & activate' : `Amount must be KES ${candidate.expected_amount.toLocaleString()}`}
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRegistrationMatchOpen(false)}>Cancel</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={memberSearchOpen} onOpenChange={setMemberSearchOpen}>
         <DialogContent className="w-[95vw] sm:max-w-[500px]">
           <DialogHeader>

@@ -69,7 +69,7 @@ class _AdminApplicationsScreenState
   }
 
   Future<void> _act(Map<String, dynamic> application, String action,
-      {String? decision, String? reason}) async {
+      {String? decision, String? reason, String? triggerKey}) async {
     final token = ref.read(authControllerProvider).appToken;
     if (token == null || token.isEmpty) return;
     final id = '${application['id'] ?? ''}';
@@ -82,6 +82,7 @@ class _AdminApplicationsScreenState
           'action': action,
           'application_id': id,
           if (decision != null) 'decision': decision,
+          if (triggerKey != null) 'trigger_key': triggerKey,
           if (reason != null) 'reason': reason,
         },
         headers: {'x-app-token': token},
@@ -156,10 +157,21 @@ class _AdminApplicationsScreenState
   Future<void> _activate(Map<String, dynamic> application) async {
     final confirmed = await _confirm(
       'Activate membership?',
-      'Confirm only after the payment receipt has been verified. This creates the member account and queues the member SMS and WhatsApp invitation.',
+      'Confirm only after the payment receipt has been verified. This creates the member account and sends the member SMS and WhatsApp invitation immediately.',
       'Confirm and activate',
     );
     if (confirmed) await _act(application, 'confirm_payment');
+  }
+
+  Future<void> _resendSms(Map<String, dynamic> application) async {
+    final status = '${application['status'] ?? ''}';
+    final confirmed = await _confirm(
+      'Resend payment SMS?',
+      'This sends the current payment code again to ${application['phone_number'] ?? 'the registered phone number'}.',
+      'Resend SMS',
+    );
+    if (!confirmed) return;
+    await _act(application, 'resend_sms', triggerKey: status == 'rejected' ? 'registration_rejected' : 'registration_approved');
   }
 
   Future<bool> _confirm(String title, String message, String action) async =>
@@ -350,6 +362,12 @@ class _AdminApplicationsScreenState
                 label: const Text('Reject'),
               ),
             ],
+            if (status == 'payment_pending' || status == 'rejected')
+              OutlinedButton.icon(
+                onPressed: busy ? null : () => _resendSms(application),
+                icon: const Icon(Icons.sms_outlined),
+                label: const Text('Resend SMS'),
+              ),
             if (status == 'payment_pending')
               FilledButton.icon(
                 onPressed: busy || application['payment_receipt'] == null
