@@ -39,7 +39,7 @@ serve(async (req) => {
 
     let query = supabase
       .from("members")
-      .select("id, member_number, name, phone_number, wallet_balance, is_active, status, probation_end_date, created_at, residence")
+      .select("id, member_number, name, gender, national_id_number, phone_number, wallet_balance, is_active, status, probation_end_date, created_at, residence")
       .order("created_at", { ascending: false })
       .range(offset, offset + fetchLimit - 1);
 
