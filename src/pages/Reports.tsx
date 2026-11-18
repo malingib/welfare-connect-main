@@ -43,9 +43,11 @@ import { persistentCache } from '@/lib/cache';
 import ReportsSubnav from '@/components/reports/ReportsSubnav';
 import { createReportFilename, exportRowsToCSV, exportRowsToXLSX } from '@/lib/reportExport';
 import {
+  buildMembershipListRows,
   downloadMembershipListDocx,
   downloadMembershipTransitionDocx,
   membershipExitReason,
+  membershipListHeaders,
   membersOnRegister,
   membersWhoLeft,
 } from '@/lib/membershipDocuments';
@@ -244,16 +246,6 @@ const defaulterHeaders: HeaderMap[] = [
   { key: 'name', label: 'Name' },
   { key: 'walletBalance', label: 'Balance (KES)' },
   { key: 'phoneNumber', label: 'Phone' },
-  { key: 'residence', label: 'Residence' },
-];
-
-const memberHeaders: HeaderMap[] = [
-  { key: 'memberNumber', label: 'Member #' },
-  { key: 'name', label: 'Name' },
-  { key: 'walletBalance', label: 'Balance' },
-  { key: 'totalContributions', label: 'Total Contributed (KES)' },
-  { key: 'transactionCount', label: 'Transactions' },
-  { key: 'lastContributionDate', label: 'Last Contribution' },
   { key: 'residence', label: 'Residence' },
 ];
 
@@ -1038,6 +1030,10 @@ const Reports = () => {
       };
     });
   }, [transactions, filteredMembers]);
+
+  // Excel/CSV must mirror the Word GROUP MEMBERSHIP LIST: same register members,
+  // same order, same columns and same cell values.
+  const memberListRows = useMemo(() => buildMembershipListRows(members), [members]);
 
   const paginatedContributions = useMemo(() => {
     const searched = searchAndFilterData(contributionsData as Record<string, unknown>[]);
@@ -1835,14 +1831,16 @@ const Reports = () => {
                   <Button 
                     variant="outline" 
                     className="border-2 font-bold" 
-                    onClick={() => handleExportXlsx('executive_members', memberReportData as unknown as Record<string, unknown>[], memberHeaders)}
+                    title="Download the current membership list as Excel, matching the Word format"
+                    onClick={() => handleExportXlsx('executive_members', memberListRows as unknown as Record<string, unknown>[], membershipListHeaders)}
                   >
                     <Download className="h-5 w-5 mr-2" /> Export Excel
                   </Button>
                   <Button 
                     variant="outline" 
                     className="border-2 font-bold" 
-                    onClick={() => handleExportCsv('executive_members', memberReportData as unknown as Record<string, unknown>[], memberHeaders)}
+                    title="Download the current membership list as CSV, matching the Word format"
+                    onClick={() => handleExportCsv('executive_members', memberListRows as unknown as Record<string, unknown>[], membershipListHeaders)}
                   >
                     <FileText className="h-5 w-5 mr-2" /> Export CSV
                   </Button>

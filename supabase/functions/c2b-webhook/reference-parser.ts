@@ -130,3 +130,80 @@ export function parseBillReference(raw: string): ParsedReference {
   
   return { memberNumber: null, caseNumber: null, phoneNumber: null, format: 'unknown', raw }
 }
+
+/**
+ * Validates reference format and extracts digits properly
+ * Enhanced algorithm to handle various edge cases
+ */
+export function validateAndNormalizeReference(raw: string): { isValid: boolean; normalized: string; error?: string } {
+  if (!raw || typeof raw !== 'string') {
+    return { isValid: false, normalized: '', error: 'Reference cannot be empty' }
+  }
+  
+  const trimmed = raw.trim()
+  
+  if (!trimmed) {
+    return { isValid: false, normalized: '', error: 'Reference cannot be empty or whitespace' }
+  }
+  
+  // Basic format validation
+  const validFormats = [
+    /^[0-9]+$/,                    // Simple number
+    /^M[0-9]+$/,                   // M followed by number
+    /^C[0-9]+$/i,                  // C followed by number (case insensitive)
+    /^[0-9]+#[0-9]+$/,             // Number#Number
+    /^M[0-9]+#[0-9]+$/,            // MNumber#Number
+    /^[0-9]+#C[0-9]+$/i,          // Number#CNumber
+    /^M[0-9]+#C[0-9]+$/i,         // MNumber#CNumber
+    /^C[0-9]+#[0-9]+$/i,          // CNumber#Number
+    /^C[0-9]+#M[0-9]+$/i,         // CNumber#MNumber
+    /^[0-9]+#M[0-9]+$/,           // Number#MNumber
+    /^[0-9]+#[0-9]+#C[0-9]+$/i,   // Number#Number#CNumber (extended format)
+    /^[0-9]{9,13}$/,              // Phone number (9-13 digits)
+    /^#[0-9]+$/,                  // #Number
+    /^#[0-9]+#C[0-9]+$/i,         // #Number#CNumber
+    /^[0-9]+#$/,                  // Number#
+  ]
+  
+  const isValidFormat = validFormats.some(regex => regex.test(trimmed))
+  
+  if (!isValidFormat) {
+    return { 
+      isValid: false, 
+      normalized: '', 
+      error: 'Invalid reference format. Supported formats: 45, M045, C045, 45#C045, 079970#M299, etc.' 
+    }
+  }
+  
+  // Normalize by removing extra whitespace and standardizing format
+  const normalized = trimmed
+    .replace(/\s+/g, '') // Remove all whitespace
+    .toUpperCase()      // Convert to uppercase for consistency
+  
+  return { isValid: true, normalized }
+}
+
+/**
+ * Enhanced reference parser with validation
+ */
+export function parseAndValidateBillReference(raw: string): ParsedReference & { isValid: boolean; error?: string } {
+  const validation = validateAndNormalizeReference(raw)
+  
+  if (!validation.isValid) {
+    return {
+      memberNumber: null,
+      caseNumber: null,
+      phoneNumber: null,
+      format: 'unknown',
+      raw,
+      isValid: false,
+      error: validation.error
+    }
+  }
+  
+  const parsed = parseBillReference(validation.normalized)
+  return {
+    ...parsed,
+    isValid: true
+  }
+}

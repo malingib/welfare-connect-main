@@ -27,12 +27,30 @@ serve(async (req) => {
     const { data, error } = await supabase
       .from("wrong_mpesa_transactions")
       .select(
-        "id, mpesa_receipt_number, phone_number, amount, sender_name, transaction_date, status, reference, matched_member_id, intended_case_id, intended_member_id, created_at",
+        "id, mpesa_receipt_number, phone_number, amount, sender_name, transaction_date, status, reference, matched_member_id, intended_case_id, intended_member_id, metadata, created_at",
       )
-      .in("status", ["pending", "PENDING_REVIEW"])
       .order("transaction_date", { ascending: false })
       .limit(300);
     if (error) throw error;
+
+    const memberIds = [...new Set((data || []).flatMap((row) => {
+      const metadata = row.metadata && typeof row.metadata === "object" ? row.metadata as Record<string, unknown> : {};
+      return [row.intended_member_id, row.matched_member_id, metadata.phone_matched_member_id]
+        .filter((id): id is string => typeof id === "string" && !!id);
+    }))];
+    const caseIds = [...new Set((data || []).map((row) => row.intended_case_id).filter((id): id is string => typeof id === "string" && !!id))];
+    const [{ data: members, error: membersError }, { data: cases, error: casesError }] = await Promise.all([
+      memberIds.length
+        ? supabase.from("members").select("id, member_number, name, phone_number").in("id", memberIds)
+        : Promise.resolve({ data: [], error: null }),
+      caseIds.length
+        ? supabase.from("cases").select("id, case_number, case_type, contribution_per_member").in("id", caseIds)
+        : Promise.resolve({ data: [], error: null }),
+    ]);
+    if (membersError) throw membersError;
+    if (casesError) throw casesError;
+    const memberById = new Map((members || []).map((member) => [member.id, member]));
+    const caseById = new Map((cases || []).map((caseRow) => [caseRow.id, caseRow]));
 
     const { data: settings } = await supabase.from("settings").select("registration_fee").limit(1).maybeSingle();
     const registrationFee = Number(settings?.registration_fee || 0);
@@ -48,6 +66,12 @@ serve(async (req) => {
 
       return {
         ...transaction,
+        matched_member: transaction.matched_member_id ? memberById.get(transaction.matched_member_id) || null : null,
+        intended_member: transaction.intended_member_id ? memberById.get(transaction.intended_member_id) || null : null,
+        payer_suggestion: typeof (transaction.metadata as Record<string, unknown> | null)?.phone_matched_member_id === "string"
+          ? memberById.get((transaction.metadata as Record<string, string>).phone_matched_member_id) || null
+          : null,
+        intended_case: transaction.intended_case_id ? caseById.get(transaction.intended_case_id) || null : null,
         registration_candidates: (applications || [])
           .filter((application) => {
             const appRef = String(application.payment_code || "").trim().toUpperCase();

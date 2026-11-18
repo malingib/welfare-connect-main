@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { Search, Plus, RefreshCw } from 'lucide-react';
+import { Search, Plus, RefreshCw, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/select';
 import TransactionList from '@/components/TransactionList';
 import { TransactionReversalDialog } from '@/components/transactions/TransactionReversalDialog';
+import { ManualMatchDialog } from '@/components/transactions/ManualMatchDialog';
 import DashboardLayout from '@/layouts/DashboardLayout';
 import { Transaction } from '@/lib/types';
 import { supabase } from '@/integrations/supabase/client';
@@ -19,6 +20,7 @@ import { TRANSACTION_LIST_COLUMNS } from '@/lib/supabaseSelectColumns';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { useSearchParams } from 'react-router-dom';
 

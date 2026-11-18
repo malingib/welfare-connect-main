@@ -16,6 +16,7 @@ import { invokeWithAppToken } from '@/lib/appAuth'
 import { toast } from 'sonner'
 import { Search, CheckCircle, XCircle, User, RefreshCw, AlertTriangle, Plus } from 'lucide-react'
 import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import {
   Dialog,
   DialogContent,
@@ -67,6 +68,7 @@ interface WrongMpesaTransaction {
     name: string
     member_number: string
   } | null
+  payer_suggestion?: Member | null
   registration_candidates?: RegistrationCandidate[]
 }
 
@@ -114,6 +116,8 @@ export function SuspenseManagement() {
   const [memberSearchOpen, setMemberSearchOpen] = useState(false)
   const [memberSearchTerm, setMemberSearchTerm] = useState('')
   const [searchResults, setSearchResults] = useState<MemberSearchResult[]>([])
+  const [matchCandidate, setMatchCandidate] = useState<MemberSearchResult | null>(null)
+  const [overrideReason, setOverrideReason] = useState('')
   const [isSearching, setIsSearching] = useState(false)
   const [registrationMatchOpen, setRegistrationMatchOpen] = useState(false)
   const [registrationCandidates, setRegistrationCandidates] = useState<RegistrationCandidate[]>([])
@@ -247,7 +251,7 @@ export function SuspenseManagement() {
     }
   }
 
-  const handleManualMatch = async (memberId: string, caseId?: string) => {
+  const handleManualMatch = async (memberId: string, caseId?: string, reason?: string) => {
     if (!selectedTransaction) return
 
     setIsMatching(true)
@@ -259,6 +263,7 @@ export function SuspenseManagement() {
         suspense_id: selectedTransaction.id,
         member_id: memberId,
         case_id: targetCaseId,
+        override_reason: reason || null,
       })
       const deduplicated = !!result?.deduplicated
 
@@ -272,6 +277,8 @@ export function SuspenseManagement() {
 
       setMemberSearchOpen(false)
       setSelectedTransaction(null)
+      setMatchCandidate(null)
+      setOverrideReason('')
       await fetchSuspenseTransactions()
     } catch (error: any) {
       toast.error('Match failed', {
@@ -280,6 +287,12 @@ export function SuspenseManagement() {
     } finally {
       setIsMatching(false)
     }
+  }
+
+  const needsMatchOverride = (member: MemberSearchResult) => {
+    const suggestions = [selectedTransaction?.payer_suggestion?.id, selectedTransaction?.intended_member?.id]
+      .filter((id): id is string => !!id)
+    return suggestions.length > 0 && !suggestions.includes(member.id)
   }
 
   const handleApplicationMatch = async (applicationId: string) => {
@@ -356,6 +369,8 @@ export function SuspenseManagement() {
     setSelectedTransaction(transaction)
     setMemberSearchTerm('')
     setSearchResults([])
+    setMatchCandidate(null)
+    setOverrideReason('')
     setMemberSearchOpen(true)
   }
 
@@ -400,11 +415,16 @@ export function SuspenseManagement() {
     setIsSearching(true)
     try {
       const searchPattern = `%${searchText}%`
-      const [membersResult, applicantsResult] = await Promise.all([
+      const [memberNameResult, memberNumberResult, applicantsResult, exactIdResult] = await Promise.all([
         supabase
           .from('members')
           .select('id, member_number, name, phone_number')
           .ilike('name', searchPattern)
+          .limit(10),
+        supabase
+          .from('members')
+          .select('id, member_number, name, phone_number')
+          .ilike('member_number', searchPattern)
           .limit(10),
         invokeWithAppToken<{ applicants: Array<{
           id: string
@@ -417,9 +437,17 @@ export function SuspenseManagement() {
           action: 'search_applicants',
           search: searchText,
         }),
+        /^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(searchText)
+          ? supabase.from('members').select('id, member_number, name, phone_number').eq('id', searchText).limit(1)
+          : Promise.resolve({ data: [], error: null }),
       ])
 
-      if (membersResult.error) throw membersResult.error
+      if (memberNameResult.error) throw memberNameResult.error
+      if (memberNumberResult.error) throw memberNumberResult.error
+      if (exactIdResult.error) throw exactIdResult.error
+
+      const memberRows = [...(memberNameResult.data || []), ...(memberNumberResult.data || []), ...(exactIdResult.data || [])]
+      const uniqueMembers = Array.from(new Map(memberRows.map((member) => [member.id, member])).values())
 
       setSearchResults([
         ...(applicantsResult.applicants || []).map((application) => ({
@@ -431,7 +459,7 @@ export function SuspenseManagement() {
           application_status: application.status,
           payment_code: application.payment_code,
         })),
-        ...(membersResult.data || []).map((member) => ({ ...member, type: 'member' as const })),
+        ...uniqueMembers.map((member) => ({ ...member, type: 'member' as const })),
       ])
     } catch (error: any) {
       toast.error('Search failed', {
@@ -926,14 +954,28 @@ END $$;`}
                     👤 Intended Member: {selectedTransaction.intended_member.member_number} ({selectedTransaction.intended_member.name})
                   </p>
                 )}
+                {selectedTransaction.payer_suggestion && (
+                  <div className="pt-2 mt-2 border-t border-border">
+                    <p className="text-emerald-700 font-medium">Payer phone matches this member</p>
+                    <p>{selectedTransaction.payer_suggestion.member_number} · {selectedTransaction.payer_suggestion.name} · {selectedTransaction.payer_suggestion.phone_number}</p>
+                    <Button className="mt-2" size="sm" variant="outline" onClick={() => setMatchCandidate({ ...selectedTransaction.payer_suggestion!, type: 'member' })}>
+                      Select payer suggestion
+                    </Button>
+                  </div>
+                )}
+                {selectedTransaction.intended_member && (
+                  <Button className="mt-2" size="sm" variant="outline" onClick={() => setMatchCandidate({ ...selectedTransaction.intended_member!, phone_number: '', type: 'member' })}>
+                    Select intended member
+                  </Button>
+                )}
               </div>
             )}
 
             {/* Search Input */}
             <div className="space-y-2">
-                <Label>Search member or applicant name</Label>
+                <Label>Search by name, member number, or member ID</Label>
               <Input
-                placeholder="Search by name..."
+                placeholder="Name, member number, or UUID..."
                 value={memberSearchTerm}
                 onChange={(e) => setMemberSearchTerm(e.target.value)}
               />
@@ -958,7 +1000,7 @@ END $$;`}
                       className="w-full p-3 text-left hover:bg-muted transition-colors flex items-center justify-between"
                       onClick={() => member.type === 'application'
                         ? void handleApplicationMatch(member.id)
-                        : void handleManualMatch(member.id, selectedTransaction?.intended_case_id || undefined)}
+                        : setMatchCandidate(member)}
                       disabled={isMatching}
                     >
                       <div>
@@ -969,7 +1011,7 @@ END $$;`}
                           </span>
                         </div>
                         <p className="text-xs text-muted-foreground">
-                          {member.member_number} • {member.phone_number}
+                          Member no. {member.member_number} • ID {member.id} • {member.phone_number}
                         </p>
                         {member.type === 'application' && (
                           <p className="text-[10px] text-muted-foreground uppercase tracking-wide">
@@ -983,6 +1025,23 @@ END $$;`}
                 </div>
               )}
             </div>
+            {matchCandidate?.type === 'member' && (
+              <div className="space-y-2 rounded-lg border p-3">
+                <p className="text-sm">Credit this payment to <strong>{matchCandidate.name}</strong> ({matchCandidate.member_number})?</p>
+                {needsMatchOverride(matchCandidate) && (
+                  <>
+                    <p className="text-sm text-amber-700">This differs from the payer or reference suggestion. Enter a reason to continue.</p>
+                    <Textarea value={overrideReason} onChange={(event) => setOverrideReason(event.target.value)} placeholder="Reason for choosing a different member" />
+                  </>
+                )}
+                <Button
+                  disabled={isMatching || (needsMatchOverride(matchCandidate) && !overrideReason.trim())}
+                  onClick={() => void handleManualMatch(matchCandidate.id, selectedTransaction?.intended_case_id || undefined, overrideReason.trim() || undefined)}
+                >
+                  {isMatching ? 'Matching…' : 'Confirm match'}
+                </Button>
+              </div>
+            )}
           </div>
 
           <DialogFooter>

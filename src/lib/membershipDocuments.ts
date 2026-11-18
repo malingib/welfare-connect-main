@@ -34,9 +34,9 @@ export const membersWhoLeft = (members: Member[]) =>
     return status === 'deceased' || status === 'inactive' || member.isActive === false;
   });
 
-/** Reason shown on the membership transition form. */
+/** Reason shown on the membership transition form, derived from member status. */
 export const membershipExitReason = (member: Member) =>
-  normalizeMemberStatus(member) === 'deceased' ? 'Death' : 'Desertion';
+  normalizeMemberStatus(member) === 'deceased' ? 'Deceased' : 'Inactive';
 
 const memberNumberValue = (member: Member) => {
   const match = String(member.memberNumber || '').match(/\d+/);
@@ -62,6 +62,50 @@ const capitalize = (value: unknown) => {
 };
 
 const displayValue = (value: unknown) => (value == null ? '' : String(value));
+
+/**
+ * Columns of the Group Membership List, shared by the Word document and the
+ * Excel/CSV exports so the three always stay in sync. The Word report has a
+ * grouped "Disability" header spanning Yes/No; the spreadsheet equivalent is
+ * split into two separate columns.
+ */
+export const membershipListHeaders: { key: string; label: string }[] = [
+  { key: 'serialNumber', label: 'S/No.' },
+  { key: 'name', label: 'Full Name' },
+  { key: 'nationalIdNumber', label: 'National ID No.' },
+  { key: 'gender', label: 'Gender' },
+  { key: 'disabilityYes', label: 'Disability Yes' },
+  { key: 'disabilityNo', label: 'Disability No' },
+  { key: 'position', label: 'Position' },
+  { key: 'phoneNumber', label: 'Phone No.' },
+  { key: 'signature', label: 'Signature' },
+];
+
+export interface MembershipListRow {
+  serialNumber: number;
+  name: string;
+  nationalIdNumber: string;
+  gender: string;
+  disabilityYes: string;
+  disabilityNo: string;
+  position: string;
+  phoneNumber: string;
+  signature: string;
+}
+
+/** Build the membership-list rows exactly as they appear in the Word report. */
+export const buildMembershipListRows = (members: Member[]): MembershipListRow[] =>
+  [...membersOnRegister(members)].sort(byMemberNumber).map((member, index) => ({
+    serialNumber: index + 1,
+    name: displayValue(member.name),
+    nationalIdNumber: displayValue(member.nationalIdNumber),
+    gender: capitalize(member.gender),
+    disabilityYes: '',
+    disabilityNo: 'No',
+    position: 'Member',
+    phoneNumber: displayValue(member.phoneNumber),
+    signature: '',
+  }));
 
 const borders = (docx: DocxModule) => ({
   top: { style: docx.BorderStyle.SINGLE, size: 4, color: '000000' },
@@ -141,7 +185,7 @@ const centeredTitle = (docx: DocxModule, text: string, size: number) =>
   });
 
 const buildMembershipListDocument = (docx: DocxModule, members: Member[]) => {
-  const sorted = [...membersOnRegister(members)].sort(byMemberNumber);
+  const listRows = buildMembershipListRows(members);
 
   const headerRow1 = new docx.TableRow({
     tableHeader: true,
@@ -165,20 +209,20 @@ const buildMembershipListDocument = (docx: DocxModule, members: Member[]) => {
     ],
   });
 
-  const rows = sorted.map((member, index) => {
+  const rows = listRows.map((row) => {
     const disabilityNoWidth = MEMBERSHIP_LIST_WIDTHS[5];
     return new docx.TableRow({
       height: { value: 620, rule: docx.HeightRule.ATLEAST },
       children: [
-        dataCell(docx, String(index + 1), MEMBERSHIP_LIST_WIDTHS[0], { align: docx.AlignmentType.CENTER }),
-        dataCell(docx, displayValue(member.name), MEMBERSHIP_LIST_WIDTHS[1]),
-        dataCell(docx, displayValue(member.nationalIdNumber), MEMBERSHIP_LIST_WIDTHS[2]),
-        dataCell(docx, capitalize(member.gender), MEMBERSHIP_LIST_WIDTHS[3], { align: docx.AlignmentType.CENTER }),
-        dataCell(docx, '', MEMBERSHIP_LIST_WIDTHS[4], { align: docx.AlignmentType.CENTER }),
-        dataCell(docx, 'No', disabilityNoWidth, { align: docx.AlignmentType.CENTER }),
-        dataCell(docx, 'Member', MEMBERSHIP_LIST_WIDTHS[6], { align: docx.AlignmentType.CENTER }),
-        dataCell(docx, displayValue(member.phoneNumber), MEMBERSHIP_LIST_WIDTHS[7]),
-        dataCell(docx, '', MEMBERSHIP_LIST_WIDTHS[8]),
+        dataCell(docx, String(row.serialNumber), MEMBERSHIP_LIST_WIDTHS[0], { align: docx.AlignmentType.CENTER }),
+        dataCell(docx, row.name, MEMBERSHIP_LIST_WIDTHS[1]),
+        dataCell(docx, row.nationalIdNumber, MEMBERSHIP_LIST_WIDTHS[2]),
+        dataCell(docx, row.gender, MEMBERSHIP_LIST_WIDTHS[3], { align: docx.AlignmentType.CENTER }),
+        dataCell(docx, row.disabilityYes, MEMBERSHIP_LIST_WIDTHS[4], { align: docx.AlignmentType.CENTER }),
+        dataCell(docx, row.disabilityNo, disabilityNoWidth, { align: docx.AlignmentType.CENTER }),
+        dataCell(docx, row.position, MEMBERSHIP_LIST_WIDTHS[6], { align: docx.AlignmentType.CENTER }),
+        dataCell(docx, row.phoneNumber, MEMBERSHIP_LIST_WIDTHS[7]),
+        dataCell(docx, row.signature, MEMBERSHIP_LIST_WIDTHS[8]),
       ],
     });
   });

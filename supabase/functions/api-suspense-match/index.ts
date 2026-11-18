@@ -22,6 +22,7 @@ serve(async (req) => {
     const suspenseId = String(body?.suspense_id || "");
     const memberId = String(body?.member_id || "");
     const caseId = body?.case_id ? String(body.case_id) : null;
+    const overrideReason = String(body?.override_reason || "").trim();
     if (!suspenseId || !memberId) {
       return jsonResponse(req, 400, { error: "suspense_id and member_id required" });
     }
@@ -34,11 +35,26 @@ serve(async (req) => {
     const { data: suspense, error: suspenseErr } = await supabase
       .from("wrong_mpesa_transactions")
       .select(
-        "id, amount, mpesa_receipt_number, intended_case_id, reference, notes, transaction_date, status",
+        "id, amount, mpesa_receipt_number, intended_case_id, intended_member_id, metadata, reference, notes, transaction_date, status",
       )
       .eq("id", suspenseId)
       .maybeSingle();
     if (suspenseErr || !suspense) return jsonResponse(req, 404, { error: "Suspense transaction not found" });
+    if (!["pending", "PENDING_REVIEW"].includes(String(suspense.status))) {
+      return jsonResponse(req, 409, { error: "Only pending suspense payments can be matched" });
+    }
+
+    const metadata = suspense.metadata && typeof suspense.metadata === "object"
+      ? suspense.metadata as Record<string, unknown>
+      : {};
+    const payerSuggestionId = typeof metadata.phone_matched_member_id === "string"
+      ? metadata.phone_matched_member_id
+      : null;
+    const suggestedMemberIds = [suspense.intended_member_id, payerSuggestionId].filter(Boolean);
+    const isOverride = suggestedMemberIds.length > 0 && !suggestedMemberIds.includes(memberId);
+    if (isOverride && overrideReason.length < 5) {
+      return jsonResponse(req, 400, { error: "A reason of at least 5 characters is required when matching a different member from the suggestions" });
+    }
 
     const targetCaseId = caseId || suspense.intended_case_id || null;
     const txType = targetCaseId ? "contribution" : "wallet_funding";
@@ -64,10 +80,33 @@ serve(async (req) => {
             matched_member_id: memberId,
             intended_case_id: targetCaseId,
             matched_at: new Date().toISOString(),
+            matched_by: claims.sub,
+            metadata: { ...metadata, matched_by: claims.sub, match_override_reason: isOverride ? overrideReason : null },
             notes: `${suspense.notes || ""}\nDuplicate receipt already in transactions (${existingTx.id}); skipped insert.`.trim(),
           })
           .eq("id", suspenseId);
         if (updateErr) throw updateErr;
+
+        const { error: auditErr } = await supabase.from("audit_logs").insert({
+          user_id: claims.sub,
+          action: "SUSPENSE_MANUAL_MATCH",
+          table_name: "wrong_mpesa_transactions",
+          record_id: suspense.id,
+          status: "success",
+          metadata: {
+            suspense_id: suspense.id,
+            member_id: memberId,
+            intended_member_id: suspense.intended_member_id,
+            payer_suggestion_member_id: payerSuggestionId,
+            override: isOverride,
+            override_reason: isOverride ? overrideReason : null,
+            receipt: normalizedReceipt,
+            amount: suspense.amount,
+            deduplicated: true,
+            existing_transaction_id: existingTx.id,
+          },
+        });
+        if (auditErr) console.error("Failed to record suspense match audit", auditErr.message);
 
         return jsonResponse(req, 200, { success: true, deduplicated: true, existing_transaction_id: existingTx.id });
       }
@@ -100,9 +139,30 @@ serve(async (req) => {
         matched_member_id: memberId,
         intended_case_id: targetCaseId,
         matched_at: new Date().toISOString(),
+        matched_by: claims.sub,
+        metadata: { ...metadata, matched_by: claims.sub, match_override_reason: isOverride ? overrideReason : null },
       })
       .eq("id", suspenseId);
     if (updateErr) throw updateErr;
+
+    const { error: auditErr } = await supabase.from("audit_logs").insert({
+      user_id: claims.sub,
+      action: "SUSPENSE_MANUAL_MATCH",
+      table_name: "wrong_mpesa_transactions",
+      record_id: suspense.id,
+      status: "success",
+      metadata: {
+        suspense_id: suspense.id,
+        member_id: memberId,
+        intended_member_id: suspense.intended_member_id,
+        payer_suggestion_member_id: payerSuggestionId,
+        override: isOverride,
+        override_reason: isOverride ? overrideReason : null,
+        receipt: normalizedReceipt,
+        amount: suspense.amount,
+      },
+    });
+    if (auditErr) console.error("Failed to record suspense match audit", auditErr.message);
 
     return jsonResponse(req, 200, { success: true });
   } catch (e) {

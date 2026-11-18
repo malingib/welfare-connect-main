@@ -27,6 +27,17 @@ export default defineConfig(({ mode }) => ({
   server: {
     host: "::",
     port: 8080,
+    watch: {
+      // The bundled Flutter app contains tens of thousands of generated files
+      // (windows/flutter/ephemeral/.plugin_symlinks/...). Watching them exhausts
+      // the OS inotify watch limit and crashes Vite with ENOSPC. They are not
+      // part of the web app, so exclude them from the file watcher.
+      // Vite merges these with its own defaults (.git, node_modules, dist, etc.).
+      ignored: [
+        "**/flt_app/**",
+        "**/graphify-out/**",
+      ],
+    },
   },
   plugins: [
     react(),
