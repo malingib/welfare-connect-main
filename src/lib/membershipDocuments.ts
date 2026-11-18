@@ -27,11 +27,18 @@ export const membersOnRegister = (members: Member[]) =>
     return status === 'active' || status === 'probation';
   });
 
-/** Members who are no longer part of the group (deceased or inactive). */
+/**
+ * Members who are no longer part of the group (deceased or inactive).
+ *
+ * Status is the single source of truth here: an `is_active` flag is not used
+ * because it can lag behind / disagree with status, which previously put the
+ * same person on both the membership list and the transition list.
+ * Using status only keeps the two reports mutually exclusive.
+ */
 export const membersWhoLeft = (members: Member[]) =>
   members.filter((member) => {
     const status = normalizeMemberStatus(member);
-    return status === 'deceased' || status === 'inactive' || member.isActive === false;
+    return status === 'deceased' || status === 'inactive';
   });
 
 /** Reason shown on the membership transition form. */

@@ -250,6 +250,10 @@ const defaulterHeaders: HeaderMap[] = [
 const memberHeaders: HeaderMap[] = [
   { key: 'memberNumber', label: 'Member #' },
   { key: 'name', label: 'Name' },
+  { key: 'nationalIdNumber', label: 'National ID No.' },
+  { key: 'gender', label: 'Gender' },
+  { key: 'phoneNumber', label: 'Phone No.' },
+  { key: 'status', label: 'Status' },
   { key: 'walletBalance', label: 'Balance' },
   { key: 'totalContributions', label: 'Total Contributed (KES)' },
   { key: 'transactionCount', label: 'Transactions' },
@@ -453,7 +457,10 @@ const Reports = () => {
           offset += limit;
         }
 
-        return rows;
+        // Guard against any repeated row from paginated reads.
+        return Array.from(
+          new Map(rows.map((row) => [String(row.id), row])).values(),
+        );
       };
 
       const reportStartIso = startOfDay(subMonths(new Date(), REPORT_TX_LOOKBACK_MONTHS)).toISOString();
@@ -582,6 +589,20 @@ const Reports = () => {
   const filteredMembers = useMemo(() => {
     return members.filter(m => locationFilter === 'all' || (m.residence || '').toLowerCase() === locationFilter.toLowerCase());
   }, [members, locationFilter]);
+
+  // The "General Member List" (table + Excel/CSV) must contain the same people
+  // as the Word membership list: only active and probation members. Inactive
+  // and deceased members belong to the Membership Transition list instead.
+  const registerMembers = useMemo(
+    () =>
+      membersOnRegister(filteredMembers).sort((a, b) =>
+        String(a.memberNumber || '').localeCompare(String(b.memberNumber || ''), undefined, {
+          numeric: true,
+          sensitivity: 'base',
+        }),
+      ),
+    [filteredMembers],
+  );
 
   const defaulters = useMemo(() => {
     let result: Member[];
@@ -1027,7 +1048,7 @@ const Reports = () => {
       });
     });
 
-    return filteredMembers.map((member) => {
+    return registerMembers.map((member) => {
       const txSummary = summaryByMember.get(member.id);
       return {
         ...member,
@@ -1037,7 +1058,7 @@ const Reports = () => {
         lastContributionDateDisplay: txSummary?.lastContributionDate ? format(txSummary.lastContributionDate, 'MMM dd, yyyy') : '-',
       };
     });
-  }, [transactions, filteredMembers]);
+  }, [transactions, registerMembers]);
 
   const paginatedContributions = useMemo(() => {
     const searched = searchAndFilterData(contributionsData as Record<string, unknown>[]);
@@ -1075,7 +1096,7 @@ const Reports = () => {
     };
   }, [transactionDetailsData, searchAndFilterData, sortData, currentPage]);
 
-  const membershipTransitionMembers = useMemo(() => membersWhoLeft(members), [members]);
+  const membershipTransitionMembers = useMemo(() => membersWhoLeft(filteredMembers), [filteredMembers]);
 
   const paginatedMembers = useMemo(() => {
     const searched = searchAndFilterData(memberReportData as unknown as Record<string, unknown>[]);
@@ -1132,7 +1153,7 @@ const Reports = () => {
   };
 
   const handleDownloadMembershipWord = async () => {
-    const registerCount = membersOnRegister(members).length;
+    const registerCount = registerMembers.length;
     if (!registerCount) {
       showToast({
         title: 'No data to export',
@@ -1143,7 +1164,7 @@ const Reports = () => {
     }
     setWordDownloading('membership');
     try {
-      await downloadMembershipListDocx(members);
+      await downloadMembershipListDocx(filteredMembers);
       showToast({
         title: 'Export complete',
         description: `Membership list with ${registerCount} current members downloaded.`
@@ -1171,7 +1192,7 @@ const Reports = () => {
     }
     setWordDownloading('transition');
     try {
-      await downloadMembershipTransitionDocx(members);
+      await downloadMembershipTransitionDocx(filteredMembers);
       showToast({ title: 'Export complete', description: 'Membership transition Word document downloaded.' });
     } catch (error) {
       console.error('Error downloading membership transition Word document:', error);
