@@ -552,22 +552,17 @@ class LiveDataService {
     required String toMemberNumber,
   }) async {
     final referenceValue = 'Transfer to $toMemberNumber';
-    final primaryResult = await (_client.rpc as dynamic)('transfer_funds', {
-      'from_member_id': fromMemberId,
-      'to_member_id': toMemberId,
-      'amount': amount,
-      'reference_text': referenceValue,
-    });
-    if (primaryResult.error != null) {
-      final fallbackResult = await (_client.rpc as dynamic)('transfer_funds', {
+    final result = await _client.rpc(
+      'transfer_funds',
+      params: {
         'from_member_id': fromMemberId,
         'to_member_id': toMemberId,
         'amount': amount,
         'reference': referenceValue,
-      });
-      if (fallbackResult.error != null) {
-        throw Exception(fallbackResult.error.message ?? 'Transfer failed');
-      }
+      },
+    );
+    if (result is Map && result['success'] == false) {
+      throw Exception((result['message'] ?? 'Transfer failed').toString());
     }
     await _invalidateWallet(fromMemberId);
   }
@@ -729,15 +724,14 @@ class LiveDataService {
     required String oldPin,
     required String newPin,
   }) async {
-    final response = await (_client.rpc as dynamic)('update_member_pin', {
-      'p_member_id': memberId,
-      'p_old_pin': oldPin,
-      'p_new_pin': newPin,
-    });
-    if (response.error != null) {
-      throw Exception(response.error.message ?? 'Failed to update PIN');
-    }
-    final data = response.data as Map<String, dynamic>?;
+    final data = await _client.rpc(
+      'update_member_pin',
+      params: {
+        'p_member_id': memberId,
+        'p_old_pin': oldPin,
+        'p_new_pin': newPin,
+      },
+    ) as Map<String, dynamic>?;
     if (data != null && data['success'] == false) {
       throw Exception((data['message'] ?? 'Failed to update PIN').toString());
     }
@@ -1211,17 +1205,16 @@ class LiveDataService {
     required String reason,
     String? adminUserId,
   }) async {
-    final response = await (_client.rpc as dynamic)('revert_transaction', {
-      'p_transaction_id': transactionId,
-      'p_admin_id':
-          (adminUserId != null && adminUserId.isNotEmpty) ? adminUserId : null,
-      'p_reason': reason,
-    });
-    if (response.error != null) {
-      throw Exception(
-          response.error.message ?? 'Failed to reverse transaction');
-    }
-    final data = response.data as Map<String, dynamic>?;
+    final data = await _client.rpc(
+      'revert_transaction',
+      params: {
+        'p_transaction_id': transactionId,
+        'p_admin_id': (adminUserId != null && adminUserId.isNotEmpty)
+            ? adminUserId
+            : null,
+        'p_reason': reason,
+      },
+    ) as Map<String, dynamic>?;
     if (data != null && data['success'] == false) {
       throw Exception(
           (data['message'] ?? 'Failed to reverse transaction').toString());
@@ -1269,11 +1262,7 @@ class LiveDataService {
   }
 
   Future<void> autoMatchSuspense() async {
-    final response =
-        await (_client.rpc as dynamic)('match_suspense_transactions');
-    if (response.error != null) {
-      throw Exception(response.error.message ?? 'Auto-match failed');
-    }
+    await _client.rpc('match_suspense_transactions');
   }
 
   Future<void> matchSuspenseWithMember({

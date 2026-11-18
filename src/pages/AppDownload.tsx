@@ -2,6 +2,8 @@ import { ArrowLeft, Check, Download, Smartphone } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 
+const WEB_BUILD_URL = '/dist.zip';
+const WEB_BUILD_FILENAME = 'malanga-welfare-web-build.zip';
 const APK_URL = '/malanga-welfare.apk';
 
 const AppDownload = () => (
@@ -24,12 +26,17 @@ const AppDownload = () => (
           <p className="text-sm font-bold uppercase tracking-[0.18em] text-[#f7c948]">Android companion app</p>
           <h1 className="mt-4 text-4xl font-black leading-tight tracking-tight sm:text-5xl">Malanga Welfare, wherever you are.</h1>
           <p className="mt-5 max-w-xl text-base leading-7 text-slate-200 sm:text-lg">
-            Download the official Android app to access your member portal from your phone.
+            Download the web build or the official Android app to access your member portal from any device.
           </p>
-          <a href={APK_URL} download="malanga-welfare.apk" className="mt-8 inline-flex min-h-12 items-center justify-center rounded-lg bg-[#f7c948] px-6 py-3 font-bold text-[#0a1f33] transition-colors hover:bg-[#ffe07a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-[#0a1f33]">
-            <Download className="mr-2 h-5 w-5" /> Download for Android
-          </a>
-          <p className="mt-3 text-sm text-slate-300">APK file · about 68 MB · Android phones and tablets</p>
+          <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+            <a href={WEB_BUILD_URL} download={WEB_BUILD_FILENAME} className="inline-flex min-h-12 items-center justify-center rounded-lg bg-white px-6 py-3 font-bold text-[#0a1f33] transition-colors hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-[#0a1f33]">
+              <Download className="mr-2 h-5 w-5" /> Download web build
+            </a>
+            <a href={APK_URL} download="malanga-welfare.apk" className="inline-flex min-h-12 items-center justify-center rounded-lg bg-[#f7c948] px-6 py-3 font-bold text-[#0a1f33] transition-colors hover:bg-[#ffe07a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-[#0a1f33]">
+              <Download className="mr-2 h-5 w-5" /> Download APK
+            </a>
+          </div>
+          <p className="mt-3 text-sm text-slate-300">Web build archive · Android APK · about 68 MB</p>
         </div>
 
         <div className="relative mx-auto flex w-full max-w-sm items-center justify-center py-4" aria-hidden="true">
@@ -51,13 +58,13 @@ const AppDownload = () => (
     <section className="mx-auto grid max-w-7xl gap-12 px-4 py-14 sm:px-6 md:grid-cols-[0.75fr_1.25fr] md:py-16">
       <div>
         <h2 className="text-2xl font-black tracking-tight">Install in a few steps</h2>
-        <p className="mt-3 max-w-md leading-7 text-slate-600">After the download finishes, open the APK file and follow Android’s installation prompts.</p>
+        <p className="mt-3 max-w-md leading-7 text-slate-600">Choose the web build or the APK, then follow the install steps for the option you downloaded.</p>
       </div>
       <ol className="grid gap-0 sm:grid-cols-3">
         {[
-          ['Download', 'Tap the download button and wait for the APK file to finish downloading.'],
-          ['Open the file', 'Open the downloaded APK from your browser or Downloads folder.'],
-          ['Install', 'If prompted, allow your browser to install unknown apps, return to the APK, then tap Install.'],
+          ['Download', 'Tap either download button and wait for the chosen file to finish downloading.'],
+          ['Open the file', 'Open the downloaded ZIP to use the web build, or open the APK from your browser or Downloads folder to install it.'],
+          ['Install', 'For the APK, allow your browser to install unknown apps, return to the file, then tap Install.'],
         ].map(([title, detail], index) => (
           <li key={title} className="border-t border-slate-300 py-5 sm:border-l sm:border-t-0 sm:pl-5 sm:pr-4">
             <span className="text-sm font-bold text-[#c2410c]">STEP 0{index + 1}</span>

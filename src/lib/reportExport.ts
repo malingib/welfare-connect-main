@@ -10,7 +10,7 @@ const stamp = () => {
   return `${yyyy}-${mm}-${dd}_${hh}${mi}`;
 };
 
-export const createReportFilename = (base: string, ext: 'csv' | 'xlsx' | 'pdf') =>
+export const createReportFilename = (base: string, ext: 'csv' | 'xlsx' | 'pdf' | 'docx') =>
   `${base}_${stamp()}.${ext}`;
 
 export const downloadBlob = (filename: string, blob: Blob) => {

@@ -22,7 +22,7 @@ test('public homepage buttons and page navigation work', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'Member' })).toBeVisible();
 });
 
-test('homepage links to the official Android app download', async ({ page }) => {
+test('homepage links to the available web build and Android app download', async ({ page }) => {
   await page.goto('/');
 
   await page.getByRole('button', { name: 'Download the App' }).click();
@@ -31,7 +31,11 @@ test('homepage links to the official Android app download', async ({ page }) => 
     page.getByRole('heading', { name: 'Malanga Welfare, wherever you are.' }),
   ).toBeVisible();
 
-  const download = page.getByRole('link', { name: 'Download for Android' });
-  await expect(download).toHaveAttribute('href', '/malanga-welfare.apk');
-  await expect(download).toHaveAttribute('download', 'malanga-welfare.apk');
+  const webBuild = page.getByRole('link', { name: 'Download web build' });
+  await expect(webBuild).toHaveAttribute('href', '/dist.zip');
+  await expect(webBuild).toHaveAttribute('download', 'malanga-welfare-web-build.zip');
+
+  const apkDownload = page.getByRole('link', { name: 'Download APK' });
+  await expect(apkDownload).toHaveAttribute('href', '/malanga-welfare.apk');
+  await expect(apkDownload).toHaveAttribute('download', 'malanga-welfare.apk');
 });

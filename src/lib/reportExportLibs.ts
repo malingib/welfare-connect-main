@@ -4,6 +4,10 @@ export async function loadXlsx() {
   return await import("xlsx");
 }
 
+export async function loadDocx(): Promise<typeof import("docx")> {
+  return await import("docx");
+}
+
 export async function loadJsPdf(): Promise<import("jspdf").default> {
   const { default: JsPDF } = await import("jspdf");
   return JsPDF;

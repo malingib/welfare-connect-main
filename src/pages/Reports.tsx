@@ -42,6 +42,13 @@ import { supabase } from '@/integrations/supabase/client';
 import { persistentCache } from '@/lib/cache';
 import ReportsSubnav from '@/components/reports/ReportsSubnav';
 import { createReportFilename, exportRowsToCSV, exportRowsToXLSX } from '@/lib/reportExport';
+import {
+  downloadMembershipListDocx,
+  downloadMembershipTransitionDocx,
+  membershipExitReason,
+  membersOnRegister,
+  membersWhoLeft,
+} from '@/lib/membershipDocuments';
 import { invokeWithAppToken } from '@/lib/appAuth';
 import {
   CASE_ROW_COLUMNS,
@@ -243,6 +250,10 @@ const defaulterHeaders: HeaderMap[] = [
 const memberHeaders: HeaderMap[] = [
   { key: 'memberNumber', label: 'Member #' },
   { key: 'name', label: 'Name' },
+  { key: 'nationalIdNumber', label: 'National ID No.' },
+  { key: 'gender', label: 'Gender' },
+  { key: 'phoneNumber', label: 'Phone No.' },
+  { key: 'status', label: 'Status' },
   { key: 'walletBalance', label: 'Balance' },
   { key: 'totalContributions', label: 'Total Contributed (KES)' },
   { key: 'transactionCount', label: 'Transactions' },
@@ -364,6 +375,7 @@ const Reports = () => {
   const [locationFilter, setLocationFilter] = useState('all');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [wordDownloading, setWordDownloading] = useState<'membership' | 'transition' | null>(null);
 
   const [dateRange, setDateRange] = useState<ReportDateRange>({
     startDate: subMonths(new Date(), 1),
@@ -445,7 +457,10 @@ const Reports = () => {
           offset += limit;
         }
 
-        return rows;
+        // Guard against any repeated row from paginated reads.
+        return Array.from(
+          new Map(rows.map((row) => [String(row.id), row])).values(),
+        );
       };
 
       const reportStartIso = startOfDay(subMonths(new Date(), REPORT_TX_LOOKBACK_MONTHS)).toISOString();
@@ -574,6 +589,20 @@ const Reports = () => {
   const filteredMembers = useMemo(() => {
     return members.filter(m => locationFilter === 'all' || (m.residence || '').toLowerCase() === locationFilter.toLowerCase());
   }, [members, locationFilter]);
+
+  // The "General Member List" (table + Excel/CSV) must contain the same people
+  // as the Word membership list: only active and probation members. Inactive
+  // and deceased members belong to the Membership Transition list instead.
+  const registerMembers = useMemo(
+    () =>
+      membersOnRegister(filteredMembers).sort((a, b) =>
+        String(a.memberNumber || '').localeCompare(String(b.memberNumber || ''), undefined, {
+          numeric: true,
+          sensitivity: 'base',
+        }),
+      ),
+    [filteredMembers],
+  );
 
   const defaulters = useMemo(() => {
     let result: Member[];
@@ -1019,7 +1048,7 @@ const Reports = () => {
       });
     });
 
-    return filteredMembers.map((member) => {
+    return registerMembers.map((member) => {
       const txSummary = summaryByMember.get(member.id);
       return {
         ...member,
@@ -1029,7 +1058,7 @@ const Reports = () => {
         lastContributionDateDisplay: txSummary?.lastContributionDate ? format(txSummary.lastContributionDate, 'MMM dd, yyyy') : '-',
       };
     });
-  }, [transactions, filteredMembers]);
+  }, [transactions, registerMembers]);
 
   const paginatedContributions = useMemo(() => {
     const searched = searchAndFilterData(contributionsData as Record<string, unknown>[]);
@@ -1066,6 +1095,8 @@ const Reports = () => {
       totalPages: Math.max(1, Math.ceil(sorted.length / ITEMS_PER_PAGE))
     };
   }, [transactionDetailsData, searchAndFilterData, sortData, currentPage]);
+
+  const membershipTransitionMembers = useMemo(() => membersWhoLeft(filteredMembers), [filteredMembers]);
 
   const paginatedMembers = useMemo(() => {
     const searched = searchAndFilterData(memberReportData as unknown as Record<string, unknown>[]);
@@ -1119,6 +1150,60 @@ const Reports = () => {
     }
     exportRowsToCSV(createReportFilename(baseName, 'csv'), rows, headers);
     showToast({ title: 'Export complete', description: 'CSV file downloaded.' });
+  };
+
+  const handleDownloadMembershipWord = async () => {
+    const registerCount = registerMembers.length;
+    if (!registerCount) {
+      showToast({
+        title: 'No data to export',
+        description: 'There are no current members on the register.',
+        variant: 'destructive'
+      });
+      return;
+    }
+    setWordDownloading('membership');
+    try {
+      await downloadMembershipListDocx(filteredMembers);
+      showToast({
+        title: 'Export complete',
+        description: `Membership list with ${registerCount} current members downloaded.`
+      });
+    } catch (error) {
+      console.error('Error downloading membership list Word document:', error);
+      showToast({
+        title: 'Export failed',
+        description: 'Could not generate the Word document.',
+        variant: 'destructive'
+      });
+    } finally {
+      setWordDownloading(null);
+    }
+  };
+
+  const handleDownloadTransitionWord = async () => {
+    if (!membershipTransitionMembers.length) {
+      showToast({
+        title: 'No data to export',
+        description: 'There are no members who have left the organization.',
+        variant: 'destructive'
+      });
+      return;
+    }
+    setWordDownloading('transition');
+    try {
+      await downloadMembershipTransitionDocx(filteredMembers);
+      showToast({ title: 'Export complete', description: 'Membership transition Word document downloaded.' });
+    } catch (error) {
+      console.error('Error downloading membership transition Word document:', error);
+      showToast({
+        title: 'Export failed',
+        description: 'Could not generate the Word document.',
+        variant: 'destructive'
+      });
+    } finally {
+      setWordDownloading(null);
+    }
   };
 
   const renderPagination = (totalPages: number) => {
@@ -1746,9 +1831,9 @@ const Reports = () => {
             />
 
             <Card className="shadow-xl border-t-4 border-black">
-              <CardHeader className="flex flex-row items-center justify-between border-b pb-6">
+              <CardHeader className="flex flex-col gap-4 border-b pb-6 md:flex-row md:items-center md:justify-between">
                 <CardTitle className="text-2xl font-bold">General Member List</CardTitle>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <div className="relative">
                     <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input
@@ -1758,6 +1843,16 @@ const Reports = () => {
                       className="pl-10 w-full sm:w-[250px]"
                     />
                   </div>
+                  <Button
+                    variant="outline"
+                    className="border-2 font-bold"
+                    onClick={handleDownloadMembershipWord}
+                    disabled={wordDownloading !== null || loading}
+                    title="Download the current membership list (active and probation members) as a Word document"
+                  >
+                    <FileText className={`h-5 w-5 mr-2 ${wordDownloading === 'membership' ? 'animate-pulse' : ''}`} />
+                    {wordDownloading === 'membership' ? 'Preparing...' : 'Word'}
+                  </Button>
                   <Button 
                     variant="outline" 
                     className="border-2 font-bold" 
@@ -1819,6 +1914,66 @@ const Reports = () => {
                 </Table></div>
 
                 {renderPagination(paginatedMembers.totalPages)}
+              </CardContent>
+            </Card>
+
+            <Card className="shadow-xl border-t-4 border-black">
+              <CardHeader className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border-b pb-6">
+                <div>
+                  <CardTitle className="text-2xl font-bold flex items-center text-foreground">
+                    Membership Transition
+                    <span className="ml-3 px-3 py-1 bg-muted text-foreground rounded-full text-sm font-black">
+                      {membershipTransitionMembers.length} Total
+                    </span>
+                  </CardTitle>
+                  <CardDescription className="text-base font-medium">
+                    Members who have left the organization (deceased or inactive)
+                  </CardDescription>
+                </div>
+                <Button
+                  variant="outline"
+                  size="lg"
+                  className="border-2 font-bold"
+                  onClick={handleDownloadTransitionWord}
+                  disabled={wordDownloading !== null || loading}
+                  title="Download the membership transition list as a Word document"
+                >
+                  <FileText className={`h-5 w-5 mr-2 ${wordDownloading === 'transition' ? 'animate-pulse' : ''}`} />
+                  {wordDownloading === 'transition' ? 'Preparing...' : 'Download Word'}
+                </Button>
+              </CardHeader>
+              <CardContent className="pt-6">
+                {membershipTransitionMembers.length === 0 ? (
+                  <p className="text-center py-8 text-muted-foreground">No members have left the organization.</p>
+                ) : (
+                  <>
+                    <div className="overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow className="bg-muted/50 hover:bg-muted/50 border-b-2">
+                            <TableHead>Name</TableHead>
+                            <TableHead>ID No.</TableHead>
+                            <TableHead>Reason</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {membershipTransitionMembers.slice(0, 10).map((member) => (
+                            <TableRow key={String(member.id)}>
+                              <TableCell className="font-medium">{String(member.name || '')}</TableCell>
+                              <TableCell>{String(member.nationalIdNumber || '')}</TableCell>
+                              <TableCell className="capitalize">{membershipExitReason(member)}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                    {membershipTransitionMembers.length > 10 && (
+                      <p className="mt-3 text-sm text-muted-foreground">
+                        Showing first 10 of {membershipTransitionMembers.length} members. Download the Word document for the full list.
+                      </p>
+                    )}
+                  </>
+                )}
               </CardContent>
             </Card>
           </TabsContent>

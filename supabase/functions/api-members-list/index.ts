@@ -39,8 +39,11 @@ serve(async (req) => {
 
     let query = supabase
       .from("members")
-      .select("id, member_number, name, phone_number, wallet_balance, is_active, status, probation_end_date, created_at, residence")
+      .select("id, member_number, name, gender, national_id_number, phone_number, wallet_balance, is_active, status, probation_end_date, created_at, residence")
+      // created_at alone is not unique (bulk imports share a timestamp), so a
+      // stable tiebreaker is required or offset pagination repeats/skips rows.
       .order("created_at", { ascending: false })
+      .order("id", { ascending: true })
       .range(offset, offset + fetchLimit - 1);
 
     if (search) {

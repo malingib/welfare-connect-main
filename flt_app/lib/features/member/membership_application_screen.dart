@@ -22,7 +22,11 @@ class _MembershipApplicationScreenState
   final _kinName = TextEditingController();
   final _kinRelationship = TextEditingController();
   final _kinPhone = TextEditingController();
-  final _dependants = <_DependantFields>[_DependantFields()];
+  final _wifeName = TextEditingController();
+  final _wifeDob = TextEditingController();
+  final _children = <_DependantFields>[_DependantFields()];
+  String? _hasWife;
+  String? _hasChildren;
   String? _gender;
   String _residenceStatus = 'resident';
   String? _village;
@@ -60,11 +64,13 @@ class _MembershipApplicationScreenState
       _kinName,
       _kinRelationship,
       _kinPhone,
+      _wifeName,
+      _wifeDob,
     ]) {
       controller.dispose();
     }
-    for (final dependant in _dependants) {
-      dependant.dispose();
+    for (final child in _children) {
+      child.dispose();
     }
     super.dispose();
   }
@@ -119,14 +125,22 @@ class _MembershipApplicationScreenState
               : null,
           'current_location':
               _residenceStatus == 'non_resident' ? _location.text.trim() : null,
-          'dependants': _dependants
-              .where((d) => d.name.text.trim().isNotEmpty)
-              .map((d) => {
-                    'full_name': d.name.text.trim(),
-                    'relationship': d.relationship.text.trim(),
-                    'date_of_birth': d.dateOfBirth.text.trim(),
-                  })
-              .toList(),
+          'dependants': [
+            if (_hasWife == 'yes')
+              {
+                'full_name': _wifeName.text.trim(),
+                'relationship': 'Wife',
+                'date_of_birth': _wifeDob.text.trim(),
+              },
+            if (_hasChildren == 'yes')
+              ..._children
+                  .where((d) => d.name.text.trim().isNotEmpty)
+                  .map((d) => {
+                        'full_name': d.name.text.trim(),
+                        'relationship': 'Child',
+                        'date_of_birth': d.dateOfBirth.text.trim(),
+                      }),
+          ],
           'next_of_kin': {
             'name': _kinName.text.trim(),
             'relationship': _kinRelationship.text.trim(),
@@ -277,54 +291,103 @@ class _MembershipApplicationScreenState
                         validator: _required),
                 ]),
                 const SizedBox(height: 16),
-                _section('Dependants (optional)', [
-                  ...List.generate(_dependants.length, (index) {
-                    final dependant = _dependants[index];
-                    return Column(
-                      children: [
-                        Row(children: [
-                          Expanded(child: _field(dependant.name, 'Full name')),
-                          if (_dependants.length > 1)
-                            IconButton(
-                              tooltip: 'Remove dependant',
-                              onPressed: () => setState(() {
-                                _dependants.removeAt(index).dispose();
-                              }),
-                              icon: const Icon(Icons.remove_circle_outline),
-                            ),
-                        ]),
-                        _field(dependant.relationship, 'Relationship'),
-                        TextFormField(
-                          controller: dependant.dateOfBirth,
-                          readOnly: true,
-                          onTap: () async {
-                            final date = await showDatePicker(
-                              context: context,
-                              initialDate: DateTime(2015),
-                              firstDate: DateTime(1900),
-                              lastDate: DateTime.now(),
-                            );
-                            if (date != null) {
-                              dependant.dateOfBirth.text = '${date.year}-'
-                                  '${date.month.toString().padLeft(2, '0')}-'
-                                  '${date.day.toString().padLeft(2, '0')}';
-                            }
-                          },
-                          decoration: const InputDecoration(
-                              labelText: 'Date of birth (optional)'),
-                        ),
-                      ],
-                    );
-                  }),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: TextButton.icon(
-                      onPressed: () =>
-                          setState(() => _dependants.add(_DependantFields())),
-                      icon: const Icon(Icons.add),
-                      label: const Text('Add dependant'),
-                    ),
+                _section('Wife and children', [
+                  DropdownButtonFormField<String>(
+                    value: _hasWife,
+                    decoration:
+                        const InputDecoration(labelText: 'Do you have a wife?'),
+                    items: const [
+                      DropdownMenuItem(value: 'yes', child: Text('Yes')),
+                      DropdownMenuItem(value: 'no', child: Text('No'))
+                    ],
+                    onChanged: (value) => setState(() => _hasWife = value),
+                    validator: (value) =>
+                        value == null ? 'Please select yes or no' : null,
                   ),
+                  if (_hasWife == 'yes') ...[
+                    _field(_wifeName, 'Wife’s full name',
+                        validator: _required,
+                        textCapitalization: TextCapitalization.words),
+                    TextFormField(
+                        controller: _wifeDob,
+                        readOnly: true,
+                        onTap: () async {
+                          final date = await showDatePicker(
+                              context: context,
+                              initialDate: DateTime(1990),
+                              firstDate: DateTime(1900),
+                              lastDate: DateTime.now());
+                          if (date != null)
+                            _wifeDob.text =
+                                '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+                        },
+                        decoration: const InputDecoration(
+                            labelText: 'Wife’s date of birth (optional)',
+                            suffixIcon: Icon(Icons.calendar_today))),
+                  ],
+                  DropdownButtonFormField<String>(
+                    value: _hasChildren,
+                    decoration: const InputDecoration(
+                        labelText: 'Do you have children?'),
+                    items: const [
+                      DropdownMenuItem(value: 'yes', child: Text('Yes')),
+                      DropdownMenuItem(value: 'no', child: Text('No'))
+                    ],
+                    onChanged: (value) => setState(() => _hasChildren = value),
+                    validator: (value) =>
+                        value == null ? 'Please select yes or no' : null,
+                  ),
+                  if (_hasChildren == 'yes') ...[
+                    ...List.generate(_children.length, (index) {
+                      final dependant = _children[index];
+                      return Column(
+                        children: [
+                          Row(children: [
+                            Expanded(
+                                child: _field(dependant.name,
+                                    'Child ${index + 1} full name',
+                                    validator: _required)),
+                            if (_children.length > 1)
+                              IconButton(
+                                tooltip: 'Remove child',
+                                onPressed: () => setState(() {
+                                  _children.removeAt(index).dispose();
+                                }),
+                                icon: const Icon(Icons.remove_circle_outline),
+                              ),
+                          ]),
+                          TextFormField(
+                            controller: dependant.dateOfBirth,
+                            readOnly: true,
+                            onTap: () async {
+                              final date = await showDatePicker(
+                                context: context,
+                                initialDate: DateTime(2015),
+                                firstDate: DateTime(1900),
+                                lastDate: DateTime.now(),
+                              );
+                              if (date != null) {
+                                dependant.dateOfBirth.text = '${date.year}-'
+                                    '${date.month.toString().padLeft(2, '0')}-'
+                                    '${date.day.toString().padLeft(2, '0')}';
+                              }
+                            },
+                            decoration: const InputDecoration(
+                                labelText: 'Date of birth (optional)'),
+                          ),
+                        ],
+                      );
+                    }),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: TextButton.icon(
+                        onPressed: () =>
+                            setState(() => _children.add(_DependantFields())),
+                        icon: const Icon(Icons.add),
+                        label: const Text('Add child'),
+                      ),
+                    ),
+                  ],
                 ]),
                 const SizedBox(height: 16),
                 _section('Next of kin', [
